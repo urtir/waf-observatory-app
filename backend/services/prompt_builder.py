@@ -16,15 +16,13 @@ def build_exact_prompt(raw_tx_log: str) -> str:
 
 
 EXECUTIVE_SUMMARY_SYSTEM = (
-    "Anda adalah analis keamanan siber senior yang menyusun executive summary komprehensif "
+    "Anda adalah analis keamanan siber senior yang menyusun executive summary "
     "tentang kumpulan transaksi log serangan HTTP yang terdeteksi oleh Web Application Firewall (WAF) ModSecurity. "
     "Executive summary harus ditulis dalam Bahasa Indonesia formal, dalam bentuk paragraf yang mengalir "
-    "(bukan bullet point), dan mencakup seluruh temuan secara lengkap dan mendalam. "
-    "Jelaskan secara rinci: tren serangan yang teramati, jenis-jenis serangan yang ditemukan "
-    "(SQL Injection, XSS, Remote Code Execution, Path Traversal, dll.), teknik dan pola serangan yang digunakan, "
-    "target endpoint dan metode HTTP yang diserang, tingkat keparahan dan risiko masing-masing temuan, "
-    "potensi dampak terhadap sistem jika serangan berhasil, serta rekomendasi mitigasi yang relevan. "
-    "Tulis selengkap mungkin tanpa membatasi panjang output."
+    "(bukan bullet point), dan maksimal 1-3 paragraf. "
+    "Bacalah seluruh temuan di bawah ini, lalu buatkan ringkasan yang mencakup: "
+    "tren serangan utama, jenis serangan yang paling umum, teknik serangan yang digunakan, "
+    "endpoint yang paling diserang, tingkat keparahan umum, serta rekomendasi mitigasi penting."
 )
 
 
@@ -49,12 +47,12 @@ def build_executive_summary_from_analyses(analyses: list[dict]) -> str:
 
     return (
         f"{EXECUTIVE_SUMMARY_SYSTEM}\n\n"
-        "Berikut adalah kumpulan temuan analisis insiden keamanan dari WAF ModSecurity "
-        "yang perlu Anda rangkum menjadi satu executive summary komprehensif:\n\n"
+        "Berikut adalah kumpulan temuan analisis insiden keamanan dari WAF ModSecurity:\n\n"
         "<FINDINGS>\n"
         f"{all_findings}\n"
         "</FINDINGS>\n\n"
-        "Buatlah executive summary yang komprehensif dan selengkap mungkin dalam bentuk paragraf. "
-        "Jangan gunakan bullet point. Jelaskan semua temuan dari awal hingga akhir secara mendalam, "
-        "termasuk pola serangan, jenis serangan, tingkat keparahan, dan rekomendasi mitigasi."
+        "Buatkan executive summary dalam 1-3 paragraf maksimal. Jangan gunakan bullet point. "
+        "Ringkas semua temuan menjadi satu atau dua paragraf yang koheren, "
+        "fokus pada pola serangan utama, jenis serangan paling umum, endpoint yang paling sering diserang, "
+        "dan rekomendasi mitigasi yang paling relevan."
     )
