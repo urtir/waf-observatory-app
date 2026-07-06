@@ -36,12 +36,12 @@ COMPARE_RESULTS_DIR = Path(
 
 MAX_RAW_CHARS = 4000
 
+# Prompt untuk golden summary - output HANYA ringkasan, tanpa preamble
 PROMPT_PREFIX = (
-    "Anda adalah analis keamanan siber yang menulis golden summary tentang satu transaksi "
-    "raw log permintaan HTTP berbahaya dari ModSecurity. Ringkasan harus mencakup: "
-    "IP penyerang, metode HTTP, endpoint yang diserang, parameter yang mencurigakan, "
-    "tujuan serangan/aktivitas mencurigakan, jenis serangan (SQLi, XSS, dll.), "
-    "teknik yang digunakan, serta dampak potensial. "
-    "Gunakan Bahasa Indonesia formal, ringkas namun komprehensif, satu paragraf."
+    "Anda adalah analis keamanan siber. Buatkan golden summary tentang satu transaksi "
+    "raw log ModSecurity berbahaya. Ringkasan harus mencakup: IP penyerang, metode HTTP, "
+    "endpoint yang diserang, parameter mencurigakan, tujuan serangan, jenis serangan (SQLi, XSS, dll.), "
+    "teknik yang digunakan, dampak potensial. "
+    "Output HANYA ringkasan satu paragraf Bahasa Indonesia formal, TANPA preamble, TANPA header."
 )
-PROMPT_SUFFIX = "Tuliskan ringkasannya."
+PROMPT_SUFFIX = "Ringkasan:"
