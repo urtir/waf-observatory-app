@@ -1,0 +1,1231 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WAF Observatory - Realtime Logs</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+</head>
+<body class="bg-light">
+<div class="container-fluid">
+  <div class="row min-vh-100">
+      <aside class="col-12 col-md-3 col-lg-2 bg-white border-end p-3 sticky-top vh-100 overflow-auto">
+      <h5 class="mb-3">WAF Observatory</h5>
+      <div class="list-group">
+        <a href="/" class="list-group-item list-group-item-action">Metrik Dataset Uji</a>
+        <a href="/realtime" class="list-group-item list-group-item-action active">Analisis Realtime</a>
+        <a href="/compare" class="list-group-item list-group-item-action">Komparasi Statistik</a>
+        <a href="/docs" class="list-group-item list-group-item-action">Dokumentasi</a>
+      </div>
+    </aside>
+    <main class="col-12 col-md-9 col-lg-10 p-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">Log WAF Realtime</h4>
+        <div class="d-flex align-items-center gap-3">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="execSummaryToggle">
+            <label class="form-check-label fw-semibold" for="execSummaryToggle">Executive Summary</label>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-outline-primary" id="btnReload">Reload Log</button>
+            <button class="btn btn-primary" id="btnAnalyze">Analyze Selected</button>
+            <button class="btn btn-success" id="btnPdf">Export PDF</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Model</label>
+              <select class="form-select" id="modelSelect"></select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Batas Log</label>
+              <input type="number" class="form-control" id="limitInput" value="500" min="1" max="10000">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Filter Status</label>
+              <select class="form-select" id="statusFilter">
+                <option value="all">Semua</option>
+                <option value="403">403</option>
+                <option value="404">404</option>
+                <option value="other">Lainnya</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Filter Alert</label>
+              <select class="form-select" id="alertFilter">
+                <option value="all">Semua</option>
+                <option value=">0">Alert > 0</option>
+                <option value=">1">Alert > 1</option>
+                <option value=">2">Alert > 2</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Auto Refresh</label>
+              <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" id="autoRefreshToggle" checked>
+                <label class="form-check-label" for="autoRefreshToggle">Setiap 3 detik</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3" id="realtimeStats">
+        <div class="col-12 col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Total Log</div><div class="fw-bold" id="statTotalLogs">0</div></div></div></div>
+        <div class="col-12 col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Status 403</div><div class="fw-bold" id="statBlocked">0</div></div></div></div>
+        <div class="col-12 col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Rata-rata Alert</div><div class="fw-bold" id="statAlertsAvg">0.00</div></div></div></div>
+        <div class="col-12 col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Avg Latency Analisis (ms)</div><div class="fw-bold" id="statLatencyAvg">0.00</div></div></div></div>
+      </div>
+
+      <div class="card mb-3 d-none" id="realtimeLoadingCard">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <span class="fw-semibold" id="realtimeLoadingTitle">Memuat log...</span>
+            <span class="text-muted" id="realtimeLoadingText">Mohon tunggu</span>
+          </div>
+          <div class="progress mt-2" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" id="realtimeProgressBar" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center gap-2">
+            <span>Log Terbaru</span>
+            <select class="form-select form-select-sm" id="timeFilter" style="width: auto;">
+              <option value="custom" selected>Custom (default)</option>
+              <option value="1h">1 Jam Terakhir</option>
+              <option value="3h">3 Jam Terakhir</option>
+              <option value="today">Hari Ini</option>
+              <option value="week">Minggu Ini</option>
+              <option value="month">Bulan Ini</option>
+            </select>
+            <select class="form-select form-select-sm" id="rowsPerPage" style="width: auto;">
+              <option value="10" selected>10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+          <span class="badge text-bg-secondary" id="logRowInfo">0 row</span>
+        </div>
+        <div class="card-body table-responsive">
+          <table class="table table-sm table-striped" id="logTable">
+            <thead>
+              <tr>
+                <th><input class="form-check-input" type="checkbox" id="checkAllLogs"></th>
+                <th>TXID</th>
+                <th>Timestamp</th>
+                <th>Status</th>
+                <th>Request</th>
+                <th>Alerts</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center gap-2">
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-secondary" id="logPrev">Prev</button>
+              <button class="btn btn-outline-secondary" id="logNext">Next</button>
+            </div>
+            <div class="btn-group btn-group-sm" id="logPageNumbers"></div>
+          </div>
+          <small class="text-muted" id="logPageLabel">Halaman 1</small>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>Hasil Analisis (Latency ms)</span>
+          <span class="badge text-bg-secondary" id="analysisRowInfo">0 row</span>
+        </div>
+        <div class="card-body table-responsive">
+          <table class="table table-sm" id="analysisTable">
+            <thead>
+              <tr>
+                <th>Analysis ID</th>
+                <th>TXID</th>
+                <th>Latency (ms)</th>
+                <th>Summary</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" id="analysisPrev">Prev</button>
+            <button class="btn btn-outline-secondary" id="analysisNext">Next</button>
+          </div>
+          <small class="text-muted" id="analysisPageLabel">Halaman 1</small>
+        </div>
+      </div>
+
+      <div class="card mb-3 d-none" id="execLoadingCard">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <span class="fw-semibold">Generating Executive Summary...</span>
+            <span class="text-muted" id="execLoadingText">Mohon tunggu</span>
+          </div>
+          <div class="progress mt-2">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" id="execProgressBar" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3 d-none" id="execSummaryCard">
+        <div class="card-header d-flex justify-content-between align-items-center bg-dark text-white">
+          <span class="fw-bold">Executive Summary</span>
+          <span class="badge bg-light text-dark" id="execSummaryMeta">-</span>
+        </div>
+        <div class="card-body">
+          <div id="execSummaryContent" style="line-height: 1.8; text-align: justify; font-size: 0.95rem;"></div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center gap-2">
+            <span>Riwayat Analisis</span>
+            <select class="form-select form-select-sm" id="historyPageSize" style="width: auto;">
+              <option value="10" selected>10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge text-bg-secondary" id="historyRowInfo">0 row</span>
+            <button class="btn btn-sm btn-outline-secondary" id="btnLoadHistory">Muat</button>
+          </div>
+        </div>
+        <div class="card-body table-responsive">
+          <table class="table table-sm table-striped" id="historyTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>TXID</th>
+                <th>Model</th>
+                <th>Latency (ms)</th>
+                <th>Summary</th>
+                <th>Waktu</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center gap-2">
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-secondary" id="historyPrev">Prev</button>
+              <button class="btn btn-outline-secondary" id="historyNext">Next</button>
+            </div>
+            <div class="btn-group btn-group-sm" id="historyPageNumbers"></div>
+          </div>
+          <small class="text-muted" id="historyPageLabel">Halaman 1</small>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center gap-2">
+            <span>Riwayat Executive Summary</span>
+            <select class="form-select form-select-sm" id="execHistoryPageSize" style="width: auto;">
+              <option value="10" selected>10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge text-bg-secondary" id="execHistoryInfo">0</span>
+            <button class="btn btn-sm btn-outline-secondary" id="btnLoadHistory2">Muat</button>
+          </div>
+        </div>
+        <div class="card-body table-responsive">
+          <table class="table table-sm table-striped" id="execHistoryTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Model</th>
+                <th>Temuan</th>
+                <th>Latency</th>
+                <th>Preview</th>
+                <th>Waktu</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center gap-2">
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-secondary" id="execHistoryPrev">Prev</button>
+              <button class="btn btn-outline-secondary" id="execHistoryNext">Next</button>
+            </div>
+            <div class="btn-group btn-group-sm" id="execHistoryPageNumbers"></div>
+          </div>
+          <small class="text-muted" id="execHistoryPageLabel">Halaman 1</small>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h1 class="modal-title fs-5">Detail</h1>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3 d-flex align-items-center gap-2 flex-wrap">
+          <span class="badge bg-secondary d-none" id="detailModel"></span>
+          <span class="badge bg-info d-none" id="detailLatency"></span>
+          <span class="text-muted" id="detailTimestamp"></span>
+        </div>
+        <p class="mb-1"><strong>TXID:</strong> <span id="detailTxid"></span></p>
+        <p class="mb-3"><strong>Status:</strong> <span id="detailStatus"></span></p>
+        <div class="mb-3">
+          <label class="form-label"><strong>Request</strong></label>
+          <textarea class="form-control" id="detailRequest" rows="4" readonly></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label"><strong>Generated Summary</strong></label>
+          <textarea class="form-control" id="detailSummary" rows="4" readonly></textarea>
+        </div>
+        <div>
+          <label class="form-label"><strong>Raw Log</strong></label>
+          <textarea class="form-control" id="detailRaw" rows="12" readonly></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Tutup</button>
+        <button type="button" class="btn btn-danger" id="btnDetailDelete" style="display:none;">Hapus</button>
+        <button type="button" class="btn btn-primary" id="btnDetailExportPdf" style="display:none;">Export PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="execDetailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white">
+        <h1 class="modal-title fs-5">Executive Summary Detail</h1>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2 d-flex align-items-center gap-2 flex-wrap">
+          <span class="badge bg-secondary" id="execDetailModel">-</span>
+          <span class="badge bg-info" id="execDetailCount">-</span>
+          <span class="badge bg-warning text-dark" id="execDetailLatency">-</span>
+          <span class="text-muted ms-2" id="execDetailTime">-</span>
+        </div>
+        <div id="execDetailAnalysesSection" class="mb-3 d-none">
+          <h6 class="text-primary mt-3 mb-2">Log yang Dianalisis</h6>
+          <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+            <table class="table table-sm table-bordered table-striped mb-0" id="execDetailAnalysesTable">
+              <thead class="table-light sticky-top">
+                <tr>
+                  <th>ID</th>
+                  <th>TXID</th>
+                  <th>Model</th>
+                  <th>Latency (ms)</th>
+                  <th>Generated Summary</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <hr>
+        <h6 class="text-primary mb-2">Executive Summary</h6>
+        <div id="execDetailContent" style="line-height: 1.8; text-align: justify; font-size: 0.95rem;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Tutup</button>
+        <button type="button" class="btn btn-danger" id="btnExecDetailDelete">Hapus</button>
+        <button type="button" class="btn btn-primary" id="btnExecDetailExportPdf">Export PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const _dec = document.createElement('textarea');
+function decHtml(s) { if (!s) return ''; _dec.innerHTML = s; return _dec.value; }
+
+function extractRequest(rawLog) {
+  if (!rawLog) return '';
+  const lines = rawLog.split('\n');
+  let capturing = false;
+  const req = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (/^-+[A-Za-z0-9]+-+B-+$/.test(t)) { capturing = true; continue; }
+    if (capturing && /^-+[A-Za-z0-9]+-+[A-Z]-+$/.test(t)) break;
+    if (capturing) req.push(line);
+  }
+  return req.join('\n').trim();
+}
+
+let currentLogs = [];
+let displayedLogs = [];
+let currentAnalyses = [];
+let currentExecSummary = '';
+let historyItems = [];
+let execHistoryItems = [];
+let logPage = 1;
+let analysisPage = 1;
+let historyPage = 1;
+let execHistoryPage = 1;
+let detailModal = null;
+let execDetailModal = null;
+let autoRefreshHandle = null;
+let loadingRealtime = false;
+let analyzingRealtime = false;
+let generatingExecSummary = false;
+let currentDetailAnalysisId = null;
+let currentExecDetailId = null;
+let selectedLogTxids = new Set();
+
+function getLogPageSize() {
+  const val = document.getElementById('rowsPerPage').value;
+  return val === 'all' ? 99999 : Number(val);
+}
+function getHistoryPageSize() {
+  const val = document.getElementById('historyPageSize').value;
+  return val === 'all' ? 99999 : Number(val);
+}
+function getExecHistoryPageSize() {
+  const val = document.getElementById('execHistoryPageSize').value;
+  return val === 'all' ? 99999 : Number(val);
+}
+
+function fmt(value, digits = 3) {
+  return value == null ? 'N/A' : Number(value).toFixed(digits);
+}
+
+function formatTimestamp(iso) {
+  if (!iso) return '-';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString('id-ID', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  } catch {
+    return iso;
+  }
+}
+
+async function loadModels() {
+  const res = await fetch('/api/models');
+  const data = await res.json();
+  const select = document.getElementById('modelSelect');
+  select.innerHTML = '';
+  data.models.forEach((m) => {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.id;
+    select.appendChild(opt);
+  });
+}
+
+function showDetail(payload, analysisId) {
+  currentDetailAnalysisId = analysisId || null;
+  document.getElementById('detailTxid').textContent = payload.tx_id || '-';
+  document.getElementById('detailTimestamp').textContent = formatTimestamp(payload.timestamp || payload.created_at) || '-';
+  document.getElementById('detailStatus').textContent = payload.status || '-';
+  document.getElementById('detailRequest').value = decHtml(payload.request || '');
+  document.getElementById('detailSummary').value = decHtml(payload.generated_summary || '-');
+  document.getElementById('detailRaw').value = decHtml(payload.raw_log || '');
+
+  const modelBadge = document.getElementById('detailModel');
+  const latencyBadge = document.getElementById('detailLatency');
+  if (payload.model_key) {
+    modelBadge.textContent = payload.model_key;
+    modelBadge.classList.remove('d-none');
+  } else {
+    modelBadge.classList.add('d-none');
+  }
+  if (payload.latency_ms != null) {
+    latencyBadge.textContent = `${fmt(payload.latency_ms)} ms`;
+    latencyBadge.classList.remove('d-none');
+  } else {
+    latencyBadge.classList.add('d-none');
+  }
+
+  const hasId = !!currentDetailAnalysisId;
+  document.getElementById('btnDetailExportPdf').style.display = hasId ? '' : 'none';
+  document.getElementById('btnDetailDelete').style.display = hasId ? '' : 'none';
+  detailModal.show();
+}
+
+function computeRealtimeStats() {
+  const total = currentLogs.length;
+  const blocked = currentLogs.filter((r) => String(r.status || '').includes('403')).length;
+  const alertAvg = total ? currentLogs.reduce((acc, row) => acc + ((row.alerts || []).length), 0) / total : 0;
+  const latencyItems = currentAnalyses.map((a) => Number(a.latency_ms || 0)).filter((v) => v > 0);
+  const latencyAvg = latencyItems.length ? latencyItems.reduce((a, b) => a + b, 0) / latencyItems.length : 0;
+
+  document.getElementById('statTotalLogs').textContent = String(total);
+  document.getElementById('statBlocked').textContent = String(blocked);
+  document.getElementById('statAlertsAvg').textContent = alertAvg.toFixed(2);
+  document.getElementById('statLatencyAvg').textContent = latencyAvg.toFixed(2);
+}
+
+function applyRealtimeFilters() {
+  const statusFilter = document.getElementById('statusFilter').value;
+  const alertFilter = document.getElementById('alertFilter').value;
+  const timeFilter = document.getElementById('timeFilter').value;
+
+  let cutoff = null;
+  const now = new Date();
+  if (timeFilter === '1h') cutoff = new Date(now.getTime() - 60 * 60 * 1000);
+  else if (timeFilter === '3h') cutoff = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+  else if (timeFilter === 'today') { cutoff = new Date(); cutoff.setHours(0, 0, 0, 0); }
+  else if (timeFilter === 'week') { cutoff = new Date(); cutoff.setDate(cutoff.getDate() - cutoff.getDay()); cutoff.setHours(0, 0, 0, 0); }
+  else if (timeFilter === 'month') { cutoff = new Date(); cutoff.setDate(1); cutoff.setHours(0, 0, 0, 0); }
+
+  displayedLogs = currentLogs.filter((row) => {
+    const status = String(row.status || '');
+    const alertCount = (row.alerts || []).length;
+
+    let statusOk = true;
+    if (statusFilter === '403') statusOk = status.includes('403');
+    else if (statusFilter === '404') statusOk = status.includes('404');
+    else if (statusFilter === 'other') statusOk = !status.includes('403') && !status.includes('404');
+
+    let alertOk = true;
+    if (alertFilter === '>0') alertOk = alertCount > 0;
+    else if (alertFilter === '>1') alertOk = alertCount > 1;
+    else if (alertFilter === '>2') alertOk = alertCount > 2;
+
+    let timeOk = true;
+    if (cutoff && row.timestamp) {
+      try {
+        const rowTime = new Date(row.timestamp);
+        timeOk = rowTime >= cutoff;
+      } catch {
+        timeOk = true;
+      }
+    }
+
+    return statusOk && alertOk && timeOk;
+  });
+}
+
+function buildPageTokens(totalPages, currentPage) {
+  const pages = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  if (currentPage <= 3) { pages.add(2); pages.add(3); pages.add(4); }
+  if (currentPage >= totalPages - 2) { pages.add(totalPages - 1); pages.add(totalPages - 2); pages.add(totalPages - 3); }
+  const sorted = Array.from(pages).filter(p => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+  const tokens = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) tokens.push('...');
+    tokens.push(sorted[i]);
+  }
+  return tokens;
+}
+
+function renderPageButtons(containerId, totalPages, currentPage, onPageChange) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const tokens = buildPageTokens(totalPages, currentPage);
+  tokens.forEach((token) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-outline-secondary';
+    if (token === '...') {
+      btn.textContent = '...';
+      btn.disabled = true;
+    } else {
+      btn.textContent = String(token);
+      if (token === currentPage) { btn.className = 'btn btn-primary'; btn.disabled = true; }
+      else btn.addEventListener('click', () => onPageChange(token));
+    }
+    container.appendChild(btn);
+  });
+}
+
+function renderLogs() {
+  const tbody = document.querySelector('#logTable tbody');
+  tbody.innerHTML = '';
+
+  const ps = getLogPageSize();
+  const total = displayedLogs.length;
+  const totalPages = Math.max(1, Math.ceil(total / ps));
+  if (logPage > totalPages) logPage = totalPages;
+
+  const start = (logPage - 1) * ps;
+  const end = Math.min(start + ps, total);
+
+  displayedLogs.slice(start, end).forEach((row, idx) => {
+    const globalIdx = start + idx;
+    const checked = selectedLogTxids.has(row.tx_id) ? 'checked' : '';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input class="form-check-input log-row-check" type="checkbox" data-idx="${globalIdx}" ${checked}></td>
+      <td><code>${row.tx_id || ''}</code></td>
+      <td><small>${formatTimestamp(row.timestamp)}</small></td>
+      <td>${row.status || '-'}</td>
+      <td><code title="${decHtml(row.request || '')}">${(row.request || '').substring(0, 80)}</code></td>
+      <td><span class="badge ${(row.alerts || []).length > 0 ? 'text-bg-danger' : 'text-bg-secondary'}">${(row.alerts || []).length}</span></td>
+      <td><button class="btn btn-sm btn-outline-dark" data-detail-log="${globalIdx}">Detail</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('logRowInfo').textContent = `${total} row`;
+  document.getElementById('logPageLabel').textContent = `Halaman ${logPage} / ${totalPages}`;
+  document.getElementById('logPrev').disabled = logPage <= 1;
+  document.getElementById('logNext').disabled = logPage >= totalPages;
+  const allOnPage = displayedLogs.slice(start, end);
+  const allChecked = allOnPage.length > 0 && allOnPage.every((r) => selectedLogTxids.has(r.tx_id));
+  document.getElementById('checkAllLogs').checked = allChecked;
+  renderPageButtons('logPageNumbers', totalPages, logPage, (p) => { logPage = p; renderLogs(); });
+
+  tbody.querySelectorAll('.log-row-check').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const row = displayedLogs[Number(cb.dataset.idx)];
+      if (!row) return;
+      if (cb.checked) selectedLogTxids.add(row.tx_id);
+      else selectedLogTxids.delete(row.tx_id);
+    });
+  });
+
+  tbody.querySelectorAll('button[data-detail-log]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const row = displayedLogs[Number(btn.dataset.detailLog)];
+      showDetail({
+        tx_id: row.tx_id,
+        timestamp: row.timestamp,
+        status: row.status,
+        request: row.request,
+        raw_log: row.raw_log,
+      });
+    });
+  });
+}
+
+function renderAnalyses() {
+  const tbody = document.querySelector('#analysisTable tbody');
+  tbody.innerHTML = '';
+
+  const total = currentAnalyses.length;
+  const ps = getLogPageSize();
+  const totalPages = Math.max(1, Math.ceil(total / ps));
+  if (analysisPage > totalPages) analysisPage = totalPages;
+
+  const start = (analysisPage - 1) * ps;
+  const end = Math.min(start + ps, total);
+
+  currentAnalyses.slice(start, end).forEach((row, idx) => {
+    const globalIdx = start + idx;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${row.analysis_id}</td>
+      <td><code>${row.tx_id || ''}</code></td>
+      <td>${fmt(row.latency_ms)}</td>
+      <td>${(row.generated_summary || '').substring(0, 120)}</td>
+      <td><button class="btn btn-sm btn-outline-dark" data-detail-analysis="${globalIdx}">Detail</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('analysisRowInfo').textContent = `${total} row`;
+  document.getElementById('analysisPageLabel').textContent = `Halaman ${analysisPage} / ${totalPages}`;
+  document.getElementById('analysisPrev').disabled = analysisPage <= 1;
+  document.getElementById('analysisNext').disabled = analysisPage >= totalPages;
+
+  tbody.querySelectorAll('button[data-detail-analysis]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const row = currentAnalyses[Number(btn.dataset.detailAnalysis)];
+      showDetail({
+        tx_id: row.tx_id,
+        status: 'Analyzed',
+        request: extractRequest(row.raw_log),
+        generated_summary: row.generated_summary,
+        raw_log: row.raw_log,
+      });
+    });
+  });
+}
+
+function getSelectedRows() {
+  return displayedLogs.filter((row) => selectedLogTxids.has(row.tx_id));
+}
+
+async function reloadLogs() {
+  if (loadingRealtime) return;
+  loadingRealtime = true;
+  const btn = document.getElementById('btnReload');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Refresh';
+  const limit = Number(document.getElementById('limitInput').value || '500');
+  try {
+    const res = await fetch(`/api/logs/realtime?limit=${limit}`);
+    const data = await res.json();
+    currentLogs = data.items || [];
+    applyRealtimeFilters();
+    renderLogs();
+    computeRealtimeStats();
+  } finally {
+    loadingRealtime = false;
+    btn.disabled = false;
+    btn.textContent = 'Reload Log';
+  }
+}
+
+function pollTask(taskId, onProgress, onDone, onError) {
+  const interval = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`);
+      const task = await res.json();
+      if (task.status === 'running' || task.status === 'pending') {
+        if (onProgress) onProgress(task);
+      } else if (task.status === 'done') {
+        clearInterval(interval);
+        if (onDone) onDone(task.result);
+      } else if (task.status === 'error') {
+        clearInterval(interval);
+        if (onError) onError(task.error || 'Task gagal');
+      }
+    } catch (err) {
+      clearInterval(interval);
+      if (onError) onError(err.message);
+    }
+  }, 1500);
+  return interval;
+}
+
+async function analyzeSelected() {
+  if (analyzingRealtime) return;
+  const model = document.getElementById('modelSelect').value;
+  const selectedRows = getSelectedRows();
+  if (!selectedRows.length) {
+    alert('Pilih minimal satu row log');
+    return;
+  }
+
+  analyzingRealtime = true;
+  document.getElementById('btnAnalyze').disabled = true;
+  document.getElementById('realtimeLoadingCard').classList.remove('d-none');
+  document.getElementById('realtimeLoadingTitle').textContent = 'Mengirim untuk dianalisis...';
+
+  try {
+    const res = await fetch('/api/analyze/realtime', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ model, selected_rows: selectedRows }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Gagal memulai analisis');
+
+    localStorage.setItem('activeRealtimeTask', data.task_id);
+
+    pollTask(data.task_id,
+      (task) => {
+        const pct = task.total > 0 ? Math.round((task.progress / task.total) * 100) : 0;
+        document.getElementById('realtimeProgressBar').style.width = pct + '%';
+        document.getElementById('realtimeProgressBar').textContent = pct + '%';
+        document.getElementById('realtimeLoadingTitle').textContent =
+          task.current_item || `Progress: ${task.progress}/${task.total}`;
+      },
+      (result) => {
+        localStorage.removeItem('activeRealtimeTask');
+        currentAnalyses = result.items || [];
+        selectedLogTxids.clear();
+        analysisPage = 1;
+        renderAnalyses();
+        computeRealtimeStats();
+        analyzingRealtime = false;
+        document.getElementById('btnAnalyze').disabled = false;
+        document.getElementById('realtimeLoadingCard').classList.add('d-none');
+
+        if (document.getElementById('execSummaryToggle').checked && currentAnalyses.length) {
+          generateExecSummary();
+        }
+      },
+      (err) => {
+        localStorage.removeItem('activeRealtimeTask');
+        alert(`Error: ${err}`);
+        analyzingRealtime = false;
+        document.getElementById('btnAnalyze').disabled = false;
+        document.getElementById('realtimeLoadingCard').classList.add('d-none');
+      }
+    );
+  } catch (err) {
+    alert(`Error: ${err.message}`);
+    analyzingRealtime = false;
+    document.getElementById('btnAnalyze').disabled = false;
+    document.getElementById('realtimeLoadingCard').classList.add('d-none');
+  }
+}
+
+async function generateExecSummary() {
+  if (generatingExecSummary) return;
+  if (!currentAnalyses.length) {
+    alert('Jalankan "Analyze Selected" terlebih dahulu sebelum generate Executive Summary');
+    document.getElementById('execSummaryToggle').checked = false;
+    return;
+  }
+
+  const model = document.getElementById('modelSelect').value;
+  generatingExecSummary = true;
+
+  const card = document.getElementById('execSummaryCard');
+  const content = document.getElementById('execSummaryContent');
+  const meta = document.getElementById('execSummaryMeta');
+
+  card.classList.remove('d-none');
+  document.getElementById('execLoadingCard').classList.remove('d-none');
+  document.getElementById('execLoadingText').textContent =
+    `LLM sedang merangkum ${currentAnalyses.length} temuan analisis...`;
+  content.innerHTML = '';
+  meta.textContent = `${currentAnalyses.length} temuan diproses...`;
+
+  try {
+    const res = await fetch('/api/analyze/executive-summary', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ model, analyses: currentAnalyses }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Gagal memulai executive summary');
+
+    localStorage.setItem('activeExecTask', data.task_id);
+
+    pollTask(data.task_id,
+      (task) => {
+        const pct = task.total > 0 ? Math.round((task.progress / task.total) * 100) : 0;
+        document.getElementById('execProgressBar').style.width = pct + '%';
+        document.getElementById('execProgressBar').textContent = pct + '%';
+        document.getElementById('execLoadingText').textContent =
+          task.current_item || `Progress: ${task.progress}/${task.total}`;
+      },
+      (result) => {
+        localStorage.removeItem('activeExecTask');
+        currentExecSummary = result.executive_summary || '';
+        const escaped = currentExecSummary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        content.innerHTML = marked.parse(escaped);
+        const latencySec = (result.latency_ms / 1000).toFixed(1);
+        meta.textContent = `Model: ${result.model} | ${result.log_count} temuan | Latency: ${latencySec}s`;
+        generatingExecSummary = false;
+        document.getElementById('execLoadingCard').classList.add('d-none');
+      },
+      (err) => {
+        localStorage.removeItem('activeExecTask');
+        content.innerHTML = '';
+        meta.textContent = 'Error';
+        alert(`Error: ${err}`);
+        generatingExecSummary = false;
+        document.getElementById('execLoadingCard').classList.add('d-none');
+      }
+    );
+  } catch (err) {
+    content.innerHTML = '';
+    meta.textContent = 'Error';
+    alert(`Error: ${err.message}`);
+    generatingExecSummary = false;
+    document.getElementById('execLoadingCard').classList.add('d-none');
+  }
+}
+
+async function exportPdf() {
+  if (!currentAnalyses.length && !currentExecSummary) {
+    alert('Belum ada hasil analisis atau executive summary untuk diexport');
+    return;
+  }
+  const ids = currentAnalyses.map((item) => item.analysis_id);
+  const body = { analysis_ids: ids };
+  if (currentExecSummary) body.executive_summary = currentExecSummary;
+
+  const res = await fetch('/api/reports/pdf', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) { alert('Gagal generate PDF'); return; }
+
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'waf_analysis.pdf';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+async function loadHistory() {
+  const [analysesRes, execRes] = await Promise.all([
+    fetch('/api/history/analyses?limit=200'),
+    fetch('/api/history/executive-summaries?limit=100'),
+  ]);
+  const analysesData = await analysesRes.json();
+  const execData = await execRes.json();
+
+  historyItems = analysesData.items || [];
+  execHistoryItems = execData.items || [];
+  historyPage = 1;
+  execHistoryPage = 1;
+  renderHistory();
+  renderExecHistory();
+}
+
+function renderHistory() {
+  const tbody = document.querySelector('#historyTable tbody');
+  tbody.innerHTML = '';
+
+  const ps = getHistoryPageSize();
+  const total = historyItems.length;
+  const totalPages = Math.max(1, Math.ceil(total / ps));
+  if (historyPage > totalPages) historyPage = totalPages;
+
+  const start = (historyPage - 1) * ps;
+  const end = Math.min(start + ps, total);
+
+  historyItems.slice(start, end).forEach((row) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${row.id}</td>
+      <td><code>${row.tx_id || '-'}</code></td>
+      <td><small>${row.model_key || '-'}</small></td>
+      <td>${fmt(row.latency_ms)}</td>
+      <td>${(row.generated_summary || '').substring(0, 100)}</td>
+      <td><small>${formatTimestamp(row.created_at)}</small></td>
+      <td><button class="btn btn-sm btn-outline-dark" data-history-detail='${JSON.stringify(row).replace(/'/g, "&#39;")}'>Detail</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('historyRowInfo').textContent = `${total} row`;
+  document.getElementById('historyPageLabel').textContent = `Halaman ${historyPage} / ${totalPages}`;
+  document.getElementById('historyPrev').disabled = historyPage <= 1;
+  document.getElementById('historyNext').disabled = historyPage >= totalPages;
+  renderPageButtons('historyPageNumbers', totalPages, historyPage, (p) => { historyPage = p; renderHistory(); });
+
+  tbody.querySelectorAll('button[data-history-detail]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const row = JSON.parse(btn.dataset.historyDetail);
+      showDetail({
+        tx_id: row.tx_id,
+        status: 'Riwayat',
+        request: extractRequest(row.raw_log),
+        generated_summary: row.generated_summary,
+        raw_log: row.raw_log,
+        model_key: row.model_key,
+        latency_ms: row.latency_ms,
+        created_at: row.created_at,
+        timestamp: row.created_at,
+      }, row.id);
+    });
+  });
+}
+
+function renderExecHistory() {
+  const tbody = document.querySelector('#execHistoryTable tbody');
+  const ps = getExecHistoryPageSize();
+  const total = execHistoryItems.length;
+  const totalPages = Math.max(1, Math.ceil(total / ps));
+  if (execHistoryPage > totalPages) execHistoryPage = totalPages;
+
+  document.getElementById('execHistoryInfo').textContent = String(total);
+
+  if (!total) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-muted text-center">Belum ada riwayat Executive Summary.</td></tr>';
+    document.getElementById('execHistoryPageLabel').textContent = 'Halaman 1';
+    document.getElementById('execHistoryPrev').disabled = true;
+    document.getElementById('execHistoryNext').disabled = true;
+    document.getElementById('execHistoryPageNumbers').innerHTML = '';
+    return;
+  }
+
+  const start = (execHistoryPage - 1) * ps;
+  const end = Math.min(start + ps, total);
+
+  tbody.innerHTML = '';
+  execHistoryItems.slice(start, end).forEach((item) => {
+    const latencySec = (item.latency_ms / 1000).toFixed(1);
+    const snippet = (item.executive_summary || '').substring(0, 120) + ((item.executive_summary || '').length > 120 ? '...' : '');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${item.id}</td>
+      <td><small>${item.model_key}</small></td>
+      <td>${item.log_count}</td>
+      <td>${latencySec}s</td>
+      <td><small>${snippet}</small></td>
+      <td><small>${formatTimestamp(item.created_at)}</small></td>
+      <td><button class="btn btn-sm btn-outline-dark" data-exec-detail='${JSON.stringify(item).replace(/'/g, "&#39;")}'>Detail</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('execHistoryPageLabel').textContent = `Halaman ${execHistoryPage} / ${totalPages}`;
+  document.getElementById('execHistoryPrev').disabled = execHistoryPage <= 1;
+  document.getElementById('execHistoryNext').disabled = execHistoryPage >= totalPages;
+  renderPageButtons('execHistoryPageNumbers', totalPages, execHistoryPage, (p) => { execHistoryPage = p; renderExecHistory(); });
+
+  tbody.querySelectorAll('button[data-exec-detail]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const item = JSON.parse(btn.dataset.execDetail);
+      showExecDetail(item);
+    });
+  });
+}
+
+async function showExecDetail(item) {
+  currentExecDetailId = item.id || null;
+  const latencySec = (item.latency_ms / 1000).toFixed(1);
+  document.getElementById('execDetailModel').textContent = item.model_key || '-';
+  document.getElementById('execDetailCount').textContent = `${item.log_count} temuan`;
+  document.getElementById('execDetailLatency').textContent = `${latencySec}s`;
+  document.getElementById('execDetailTime').textContent = formatTimestamp(item.created_at);
+  document.getElementById('execDetailContent').innerHTML = '<span class="text-muted">Memuat...</span>';
+  document.querySelector('#execDetailAnalysesTable tbody').innerHTML = '';
+  document.getElementById('execDetailAnalysesSection').classList.add('d-none');
+  execDetailModal.show();
+
+  try {
+    const res = await fetch(`/api/history/executive-summaries/${item.id}`);
+    if (!res.ok) return;
+    const detail = await res.json();
+    const analyses = detail.analyses || [];
+
+    if (analyses.length) {
+      const tbody = document.querySelector('#execDetailAnalysesTable tbody');
+      analyses.forEach((a) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${a.id}</td>
+          <td><code>${a.tx_id || '-'}</code></td>
+          <td><small>${a.model_key || '-'}</small></td>
+          <td>${fmt(a.latency_ms)}</td>
+          <td>${(a.generated_summary || '').substring(0, 150)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      document.getElementById('execDetailAnalysesSection').classList.remove('d-none');
+    }
+  } catch (err) {
+    console.error('Gagal memuat detail analyses:', err);
+  }
+
+  const escaped = (item.executive_summary || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  document.getElementById('execDetailContent').innerHTML = marked.parse(escaped);
+}
+
+async function deleteAnalysis(id) {
+  if (!id) return;
+  if (!confirm('Hapus riwayat analisis ini?')) return;
+  const res = await fetch(`/api/history/analyses/${id}/delete`, { method: 'POST' });
+  if (!res.ok) { alert('Gagal menghapus'); return; }
+  detailModal.hide();
+  await loadHistory();
+}
+
+async function deleteExecSummary(id) {
+  if (!id) return;
+  if (!confirm('Hapus riwayat executive summary ini?')) return;
+  const res = await fetch(`/api/history/executive-summaries/${id}/delete`, { method: 'POST' });
+  if (!res.ok) { alert('Gagal menghapus'); return; }
+  execDetailModal.hide();
+  await loadHistory();
+}
+
+function toggleAutoRefresh() {
+  const enabled = document.getElementById('autoRefreshToggle').checked;
+  if (autoRefreshHandle) { clearInterval(autoRefreshHandle); autoRefreshHandle = null; }
+  if (enabled) autoRefreshHandle = setInterval(() => reloadLogs(), 3000);
+}
+
+document.getElementById('btnReload').addEventListener('click', reloadLogs);
+document.getElementById('btnAnalyze').addEventListener('click', analyzeSelected);
+document.getElementById('btnPdf').addEventListener('click', exportPdf);
+document.getElementById('autoRefreshToggle').addEventListener('change', toggleAutoRefresh);
+document.getElementById('rowsPerPage').addEventListener('change', () => { logPage = 1; renderLogs(); });
+document.getElementById('timeFilter').addEventListener('change', () => { applyRealtimeFilters(); logPage = 1; renderLogs(); });
+document.getElementById('statusFilter').addEventListener('change', () => { applyRealtimeFilters(); logPage = 1; renderLogs(); });
+document.getElementById('alertFilter').addEventListener('change', () => { applyRealtimeFilters(); logPage = 1; renderLogs(); });
+
+document.getElementById('execSummaryToggle').addEventListener('change', async (e) => {
+  if (e.target.checked) { if (currentAnalyses.length) await generateExecSummary(); }
+  else { document.getElementById('execSummaryCard').classList.add('d-none'); currentExecSummary = ''; }
+});
+document.getElementById('checkAllLogs').addEventListener('change', (e) => {
+  const checked = e.target.checked;
+  const ps = getLogPageSize();
+  const start = (logPage - 1) * ps;
+  const end = Math.min(start + ps, displayedLogs.length);
+  displayedLogs.slice(start, end).forEach((row) => {
+    if (checked) selectedLogTxids.add(row.tx_id);
+    else selectedLogTxids.delete(row.tx_id);
+  });
+  document.querySelectorAll('#logTable tbody .log-row-check').forEach((cb) => { cb.checked = checked; });
+});
+document.getElementById('logPrev').addEventListener('click', () => { if (logPage > 1) { logPage--; renderLogs(); } });
+document.getElementById('logNext').addEventListener('click', () => { logPage++; renderLogs(); });
+document.getElementById('analysisPrev').addEventListener('click', () => { if (analysisPage > 1) { analysisPage--; renderAnalyses(); } });
+document.getElementById('analysisNext').addEventListener('click', () => { analysisPage++; renderAnalyses(); });
+
+document.getElementById('historyPageSize').addEventListener('change', () => { historyPage = 1; renderHistory(); });
+document.getElementById('historyPrev').addEventListener('click', () => { if (historyPage > 1) { historyPage--; renderHistory(); } });
+document.getElementById('historyNext').addEventListener('click', () => { historyPage++; renderHistory(); });
+document.getElementById('btnLoadHistory').addEventListener('click', loadHistory);
+
+document.getElementById('execHistoryPageSize').addEventListener('change', () => { execHistoryPage = 1; renderExecHistory(); });
+document.getElementById('execHistoryPrev').addEventListener('click', () => { if (execHistoryPage > 1) { execHistoryPage--; renderExecHistory(); } });
+document.getElementById('execHistoryNext').addEventListener('click', () => { execHistoryPage++; renderExecHistory(); });
+document.getElementById('btnLoadHistory2').addEventListener('click', loadHistory);
+
+async function exportDetailPdf() {
+  if (!currentDetailAnalysisId) return;
+  const btn = document.getElementById('btnDetailExportPdf');
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  try {
+    const res = await fetch(`/api/history/analyses/${currentDetailAnalysisId}/pdf`);
+    if (!res.ok) { alert('Gagal generate PDF'); return; }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `waf_analysis_${currentDetailAnalysisId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Export PDF';
+  }
+}
+
+async function exportExecDetailPdf() {
+  if (!currentExecDetailId) return;
+  const btn = document.getElementById('btnExecDetailExportPdf');
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  try {
+    const res = await fetch(`/api/history/executive-summaries/${currentExecDetailId}/pdf`);
+    if (!res.ok) { alert('Gagal generate PDF'); return; }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `waf_exec_summary_${currentExecDetailId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Export PDF';
+  }
+}
+
+document.getElementById('btnDetailExportPdf').addEventListener('click', exportDetailPdf);
+document.getElementById('btnExecDetailExportPdf').addEventListener('click', exportExecDetailPdf);
+document.getElementById('btnDetailDelete').addEventListener('click', () => deleteAnalysis(currentDetailAnalysisId));
+document.getElementById('btnExecDetailDelete').addEventListener('click', () => deleteExecSummary(currentExecDetailId));
+
+function resumeRealtimeTasks() {
+  const analysisTaskId = localStorage.getItem('activeRealtimeTask');
+  if (analysisTaskId) {
+    analyzingRealtime = true;
+    document.getElementById('btnAnalyze').disabled = true;
+    document.getElementById('realtimeLoadingCard').classList.remove('d-none');
+    document.getElementById('realtimeLoadingTitle').textContent = 'Melanjutkan analisis sebelumnya...';
+    pollTask(analysisTaskId,
+      (task) => {
+        const pct = task.total > 0 ? Math.round((task.progress / task.total) * 100) : 0;
+        document.getElementById('realtimeProgressBar').style.width = pct + '%';
+        document.getElementById('realtimeProgressBar').textContent = pct + '%';
+        document.getElementById('realtimeLoadingTitle').textContent =
+          task.current_item || `Progress: ${task.progress}/${task.total}`;
+      },
+      (result) => {
+        localStorage.removeItem('activeRealtimeTask');
+        currentAnalyses = result.items || [];
+        analysisPage = 1;
+        renderAnalyses();
+        computeRealtimeStats();
+        analyzingRealtime = false;
+        document.getElementById('btnAnalyze').disabled = false;
+        document.getElementById('realtimeLoadingCard').classList.add('d-none');
+      },
+      () => {
+        localStorage.removeItem('activeRealtimeTask');
+        analyzingRealtime = false;
+        document.getElementById('btnAnalyze').disabled = false;
+        document.getElementById('realtimeLoadingCard').classList.add('d-none');
+      }
+    );
+  }
+
+  const execTaskId = localStorage.getItem('activeExecTask');
+  if (execTaskId) {
+    generatingExecSummary = true;
+    document.getElementById('execSummaryCard').classList.remove('d-none');
+    document.getElementById('execLoadingCard').classList.remove('d-none');
+    document.getElementById('execLoadingText').textContent = 'Melanjutkan executive summary sebelumnya...';
+    pollTask(execTaskId,
+      (task) => {
+        const pct = task.total > 0 ? Math.round((task.progress / task.total) * 100) : 0;
+        document.getElementById('execProgressBar').style.width = pct + '%';
+        document.getElementById('execProgressBar').textContent = pct + '%';
+        document.getElementById('execLoadingText').textContent =
+          task.current_item || `Progress: ${task.progress}/${task.total}`;
+      },
+      (result) => {
+        localStorage.removeItem('activeExecTask');
+        currentExecSummary = result.executive_summary || '';
+        const escaped = currentExecSummary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        document.getElementById('execSummaryContent').innerHTML = marked.parse(escaped);
+        const latencySec = (result.latency_ms / 1000).toFixed(1);
+        document.getElementById('execSummaryMeta').textContent =
+          `Model: ${result.model} | ${result.log_count} temuan | Latency: ${latencySec}s`;
+        generatingExecSummary = false;
+        document.getElementById('execLoadingCard').classList.add('d-none');
+      },
+      () => {
+        localStorage.removeItem('activeExecTask');
+        generatingExecSummary = false;
+        document.getElementById('execLoadingCard').classList.add('d-none');
+      }
+    );
+  }
+}
+
+(async function init() {
+  detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+  execDetailModal = new bootstrap.Modal(document.getElementById('execDetailModal'));
+  await loadModels();
+  await reloadLogs();
+  toggleAutoRefresh();
+  await loadHistory();
+  resumeRealtimeTasks();
+})();
+</script>
+</body>
+</html>

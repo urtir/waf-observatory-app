@@ -1,0 +1,4 @@
+# Install this file when you are ready to run full BERTScore evaluation.
+# It is intentionally split because torch download can be very large in WSL.
+-r requirements.txt
+bert-score==0.3.13

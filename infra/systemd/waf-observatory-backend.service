@@ -1,0 +1,14 @@
+[Unit]
+Description=WAF Observatory Flask Backend (Waitress)
+After=network.target
+
+[Service]
+Type=simple
+User=risqu
+WorkingDirectory=/mnt/c/Users/risqu/Desktop/SKRIPSI/waf-observatory-app
+ExecStart=/usr/bin/env bash /mnt/c/Users/risqu/Desktop/SKRIPSI/waf-observatory-app/scripts/run_backend_waitress.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WAF Observatory - Dokumentasi</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container-fluid">
+    <div class="row min-vh-100">
+      <aside class="col-12 col-md-3 col-lg-2 bg-white border-end p-3 sticky-top vh-100 overflow-auto">
+        <h5 class="mb-3">WAF Observatory</h5>
+        <div class="list-group">
+          <a href="/" class="list-group-item list-group-item-action">Metrik Dataset Uji</a>
+          <a href="/realtime" class="list-group-item list-group-item-action">Analisis Realtime</a>
+          <a href="/compare" class="list-group-item list-group-item-action">Komparasi Statistik</a>
+          <a href="/docs" class="list-group-item list-group-item-action active">Dokumentasi</a>
+        </div>
+      </aside>
+
+      <main class="col-12 col-md-9 col-lg-10 p-4">
+        <div class="card mb-4">
+          <div class="card-body">
+            <h2 class="mb-2">Dokumentasi Webapp WAF Observatory</h2>
+            <p class="mb-1">Aplikasi ini digunakan untuk mengevaluasi kualitas ringkasan insiden keamanan berbasis LLM terhadap log serangan dari ModSecurity.</p>
+            <p class="mb-0">Webapp menyediakan tiga mode utama: evaluasi dataset terlabel (offline), analisis realtime log WAF (online), dan komparasi statistik antarmodel (Shapiro + uji inferensial), lengkap dengan metrik evaluasi, ekspor laporan PDF, dan sistem riwayat persisten.</p>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>1. Fungsi Utama Webapp</strong></div>
+          <div class="card-body">
+            <ol class="mb-0">
+              <li class="mb-2"><strong>Evaluasi Dataset Uji:</strong> memilih TxID dari dataset historis (atau upload file custom), menjalankan inferensi ringkasan LLM secara asinkron di background, lalu menghitung metrik kualitas terhadap golden summary. Hasil evaluasi otomatis disimpan ke CSV dan riwayat.</li>
+              <li class="mb-2"><strong>Analisis Realtime:</strong> membaca transaksi terbaru dari audit log ModSecurity (data terakumulasi di database, tidak hilang saat reload), memilih event tertentu, kemudian menghasilkan ringkasan otomatis berbasis LLM secara asinkron. Mendukung Executive Summary dan auto-refresh tanpa menghilangkan seleksi checkbox.</li>
+              <li class="mb-2"><strong>Audit & Pelaporan:</strong> menyimpan hasil analisis ke SQLite untuk jejak evaluasi, lalu mengekspor hasil terpilih ke PDF (termasuk executive summary).</li>
+              <li><strong>Komparasi Model:</strong> menampilkan hasil uji statistik inferensial (Shapiro-Wilk, Paired T-Test / Wilcoxon, Holm-Bonferroni, Effect Size) dengan Chart.js visualisasi, interpretasi otomatis, dan kategori effect size.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>2. Arsitektur Sistem</strong></div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-sm table-striped mb-0">
+                <thead>
+                  <tr>
+                    <th>Komponen</th>
+                    <th>Peran</th>
+                    <th>Teknologi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Frontend</td>
+                    <td>UI dashboard, tabel, filtering, pagination, modal detail, Chart.js, task polling</td>
+                    <td>Bootstrap 5 + vanilla JavaScript + Chart.js + marked.js</td>
+                  </tr>
+                  <tr>
+                    <td>Backend API</td>
+                    <td>Routing, orkestrasi inferensi, hitung metrik, baca dataset/log, ekspor PDF, task manager</td>
+                    <td>Flask + Waitress + threading</td>
+                  </tr>
+                  <tr>
+                    <td>WAF Layer</td>
+                    <td>Reverse proxy + inspeksi request + log audit keamanan</td>
+                    <td>Nginx + ModSecurity + OWASP CRS</td>
+                  </tr>
+                  <tr>
+                    <td>LLM Inference</td>
+                    <td>Generasi ringkasan security incident dari raw log</td>
+                    <td>LM Studio (OpenAI-compatible local endpoint)</td>
+                  </tr>
+                  <tr>
+                    <td>Persistence</td>
+                    <td>Menyimpan hasil analisis, riwayat evaluasi, riwayat komparasi, raw log</td>
+                    <td>SQLite (7 tabel)</td>
+                  </tr>
+                  <tr>
+                    <td>Task Manager</td>
+                    <td>Background thread processing untuk inferensi LLM yang panjang</td>
+                    <td>Python threading + DB polling</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>3. Sistem Proses Asinkron (Background Task)</strong></div>
+          <div class="card-body">
+            <p>Seluruh proses AI (evaluasi dataset, analisis realtime, executive summary) dijalankan di background thread agar UI tidak freeze dan user dapat berpindah halaman tanpa membatalkan proses.</p>
+            <h6>Alur Kerja</h6>
+            <ol>
+              <li>User klik tombol proses &rarr; backend mengembalikan <code>task_id</code> secara instan.</li>
+              <li>Frontend menyimpan <code>task_id</code> ke <code>localStorage</code> dan mulai polling setiap 1.5 detik ke <code>GET /api/tasks/{id}</code>.</li>
+              <li>Progress bar dinamis menampilkan persentase aktual (0%&ndash;100%) berdasarkan <code>progress/total</code>.</li>
+              <li>User dapat pindah halaman dan kembali &rarr; frontend mendeteksi <code>task_id</code> di <code>localStorage</code> dan melanjutkan polling otomatis.</li>
+              <li>Saat task selesai, hasil ditampilkan dan <code>task_id</code> dihapus dari <code>localStorage</code>.</li>
+            </ol>
+            <h6>Endpoint Task</h6>
+            <div class="table-responsive">
+              <table class="table table-sm table-striped mb-0">
+                <thead>
+                  <tr><th>Endpoint</th><th>Fungsi</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>GET /api/tasks/{id}</code></td><td>Poll status, progress, current_item, result</td></tr>
+                  <tr><td><code>GET /api/tasks/active?page=...</code></td><td>Cek task aktif per halaman</td></tr>
+                  <tr><td><code>GET /api/tasks/recent</code></td><td>Riwayat task terakhir</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>4. Dataset dan Sumber Data</strong></div>
+          <div class="card-body">
+            <ul class="mb-2">
+              <li class="mb-2"><strong>Raw attack log:</strong> file audit ModSecurity berisi event transaksi serangan HTTP.</li>
+              <li class="mb-2"><strong>Golden summary:</strong> ringkasan referensi untuk TxID yang sudah dinormalisasi dan dipasangkan dengan log.</li>
+              <li class="mb-2"><strong>Join key:</strong> TxID digunakan untuk menyatukan raw log dan golden summary.</li>
+              <li><strong>Output evaluasi:</strong> generated summary + skor metrik + latency per transaksi, otomatis disimpan ke CSV.</li>
+            </ul>
+            <h6>Upload Custom Dataset</h6>
+            <p>Halaman Evaluasi Dataset mendukung upload file log (.log/.txt) dan golden summary (.csv) melalui tombol browse. Sistem akan menampilkan jumlah TxID yang berhasil di-join serta TxID yang tidak ditemukan di golden CSV. File yang diupload disimpan di direktori <code>reports/uploads/</code>.</p>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>5. Metrik Evaluasi (Penjelasan Lengkap)</strong></div>
+          <div class="card-body">
+            <h6>ROUGE-1 F1</h6>
+            <p>Mengukur overlap unigram antara ringkasan model dan golden summary. Cocok untuk mengukur kesamaan informasi tingkat kata. Semakin tinggi, semakin banyak konten inti yang selaras.</p>
+
+            <h6>ROUGE-2 F1</h6>
+            <p>Mengukur overlap bigram (frasa 2 kata). Lebih ketat dari ROUGE-1 karena menilai urutan lokal kata. Nilai tinggi menandakan kesesuaian struktur kalimat dan konteks lebih baik.</p>
+
+            <h6>ROUGE-L F1</h6>
+            <p>Menggunakan Longest Common Subsequence (LCS), menilai kesamaan urutan token tanpa harus bersebelahan langsung. Bagus untuk menilai alur naratif ringkasan.</p>
+
+            <h6>METEOR</h6>
+            <p>Menggabungkan precision dan recall token serta penalti fragmentasi. Dalam implementasi ini, METEOR dikombinasikan dengan resource WordNet/OMW saat tersedia agar lebih toleran terhadap variasi leksikal.</p>
+
+            <h6>BERTScore F1</h6>
+            <p>Metrik semantic similarity berbasis embedding transformer. Tidak hanya mencocokkan token literal, tetapi juga kedekatan makna antar kata/frasa. Model BERT (<code>bert-base-multilingual-cased</code>) di-preload saat server start agar tidak delay saat evaluasi pertama.</p>
+
+            <h6>Latency (ms)</h6>
+            <p>Waktu respons inferensi model dari request sampai output summary diterima. Metrik ini penting untuk menilai feasibility penggunaan realtime.</p>
+
+            <div class="alert alert-secondary mt-3 mb-0">
+              <strong>Interpretasi cepat:</strong>
+              ROUGE/METEOR mengevaluasi kesesuaian tekstual, BERTScore mengevaluasi kesesuaian semantik, dan latency mengevaluasi efisiensi operasional.
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>6. Uji Statistik Inferensial</strong></div>
+          <div class="card-body">
+            <h6>Alur Pengujian</h6>
+            <ol>
+              <li><strong>Shapiro-Wilk:</strong> menguji normalitas distribusi selisih per metrik. Metrik normal diuji dengan Paired T-Test, non-normal dengan Wilcoxon Signed-Rank.</li>
+              <li><strong>Uji Beda:</strong> Paired T-Test (Cohen&rsquo;s dz) untuk data normal, Wilcoxon (Rank-Biserial Approximation) untuk data non-normal.</li>
+              <li><strong>Holm-Bonferroni:</strong> koreksi p-value untuk menghindari Type I Error pada pengujian majemuk.</li>
+              <li><strong>Effect Size:</strong> mengukur signifikansi praktis (bukan hanya statistik).</li>
+            </ol>
+
+            <h6>Kategori Effect Size</h6>
+            <div class="table-responsive">
+              <table class="table table-sm table-striped mb-3">
+                <thead>
+                  <tr><th>Kategori</th><th>Cohen&rsquo;s dz (T-Test)</th><th>Rank-Biserial (Wilcoxon)</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><span class="badge text-bg-secondary">Sangat Kecil</span></td><td>&lt; 0.2</td><td>&lt; 0.1</td></tr>
+                  <tr><td><span class="badge text-bg-info">Kecil</span></td><td>0.2 &ndash; 0.5</td><td>0.1 &ndash; 0.3</td></tr>
+                  <tr><td><span class="badge text-bg-warning">Sedang</span></td><td>0.5 &ndash; 0.8</td><td>0.3 &ndash; 0.5</td></tr>
+                  <tr><td><span class="badge text-bg-success">Besar</span></td><td>&ge; 0.8</td><td>&ge; 0.5</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h6>Visualisasi</h6>
+            <p>Halaman Komparasi Statistik menampilkan dua panel Chart.js bar chart interaktif:</p>
+            <ul class="mb-0">
+              <li><strong>Selisih Mean (Qwen - Gemma):</strong> batang hijau jika Gemma unggul, merah jika Qwen unggul.</li>
+              <li><strong>Effect Size per Metrik:</strong> batang biru untuk nilai positif, oranye untuk negatif.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>7. Sistem Riwayat (History)</strong></div>
+          <div class="card-body">
+            <p>Seluruh hasil pemrosesan AI tersimpan di SQLite dan dapat diakses kembali tanpa inferensi ulang.</p>
+            <div class="table-responsive">
+              <table class="table table-sm table-striped mb-0">
+                <thead>
+                  <tr><th>Halaman</th><th>Tabel Riwayat</th><th>Fitur</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Evaluasi Dataset</td><td>Riwayat Evaluasi Dataset</td><td>Detail, download CSV, hapus</td></tr>
+                  <tr><td>Analisis Realtime</td><td>Riwayat Analisis + Riwayat Executive Summary</td><td>Detail, export PDF, hapus</td></tr>
+                  <tr><td>Komparasi Statistik</td><td>Riwayat Komparasi Statistik</td><td>Detail highlights/conclusions, hapus</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>8. LLM dan Model yang Digunakan</strong></div>
+          <div class="card-body">
+            <p class="mb-2">Aplikasi ini menggunakan endpoint LM Studio lokal (OpenAI-compatible API) dengan model aktif:</p>
+            <ul>
+              <li><strong>google/gemma-3-4b</strong></li>
+              <li><strong>qwen/qwen3-4b-2507</strong></li>
+            </ul>
+            <p class="mb-2">Model dipilih di UI sebelum inferensi. Prompt yang digunakan bersifat domain-specific untuk incident summarization dari raw log ModSecurity, dengan instruksi Bahasa Indonesia formal.</p>
+            <p class="mb-0">BERTScore model (<code>bert-base-multilingual-cased</code>) di-preload saat server start di background thread agar evaluasi pertama tidak delay.</p>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>9. Penjelasan WAF (Web Application Firewall)</strong></div>
+          <div class="card-body">
+            <h6>Konsep WAF</h6>
+            <p>WAF bertugas memeriksa HTTP traffic masuk/keluar untuk mendeteksi dan memblokir pola serangan seperti SQLi, XSS, RCE, path traversal, dan anomali protokol.</p>
+
+            <h6>Implementasi di Aplikasi Ini</h6>
+            <ul>
+              <li>Nginx sebagai reverse proxy.</li>
+              <li>ModSecurity sebagai inspection engine.</li>
+              <li>OWASP CRS sebagai rule-set standar industri.</li>
+              <li>Audit log ModSecurity menjadi sumber data analisis LLM.</li>
+              <li>Data log terakumulasi di database (tabel <code>raw_logs</code>) sehingga tidak hilang saat reload.</li>
+            </ul>
+
+            <h6>Manfaat Integrasi WAF + LLM</h6>
+            <p class="mb-0">WAF memberikan deteksi rule-based yang presisi, sedangkan LLM membantu menerjemahkan event teknis menjadi ringkasan manusiawi untuk SOC analyst, pelaporan, dan triage cepat.</p>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>10. Fitur Halaman Evaluasi Dataset</strong></div>
+          <div class="card-body">
+            <ul class="mb-0">
+              <li class="mb-2"><strong>Upload Custom Dataset:</strong> browse file log dan golden CSV langsung dari explorer. Sistem menampilkan jumlah join dan missing TxID.</li>
+              <li class="mb-2"><strong>Pilih N Pertama:</strong> membatasi jumlah TxID yang dievaluasi.</li>
+              <li class="mb-2"><strong>Checkbox Seleksi:</strong> memilih TxID individual atau semua baris di halaman.</li>
+              <li class="mb-2"><strong>Progress Bar Dinamis:</strong> menampilkan persentase aktual (0%&ndash;100%) selama proses inferensi.</li>
+              <li class="mb-2"><strong>Auto-Save CSV:</strong> hasil evaluasi otomatis disimpan ke file CSV yang dapat diunduh dan digunakan di halaman Komparasi Statistik.</li>
+              <li class="mb-2"><strong>Riwayat Evaluasi:</strong> tabel riwayat otomatis ter-load saat halaman dibuka, dengan fitur download CSV dan hapus.</li>
+              <li><strong>Detail Modal:</strong> perbandingan side-by-side raw log, golden summary, dan generated summary.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>11. Fitur Halaman Analisis Realtime</strong></div>
+          <div class="card-body">
+            <ul class="mb-0">
+              <li class="mb-2"><strong>Quick Stats:</strong> 4 kartu &mdash; Total Log, Status 403, Rata-rata Alert, Avg Latency Analisis.</li>
+              <li class="mb-2"><strong>Auto-Refresh:</strong> update log setiap 3 detik tanpa menghilangkan centangan checkbox yang sudah dipilih.</li>
+              <li class="mb-2"><strong>Filter:</strong> status HTTP (403/404/other), jumlah alert (>0/>1/>2), rentang waktu (1 jam, 3 jam, hari ini, minggu ini, bulan ini).</li>
+              <li class="mb-2"><strong>Show Rows:</strong> paginasi dengan 10/25/50/100/All baris per halaman, dilengkapi nomor halaman.</li>
+              <li class="mb-2"><strong>Executive Summary:</strong> toggle untuk merangkum seluruh temuan analisis menjadi satu narasi komprehensif.</li>
+              <li class="mb-2"><strong>Progress Bar Dinamis:</strong> persentase aktual untuk analisis dan executive summary.</li>
+              <li class="mb-2"><strong>Riwayat:</strong> tabel Riwayat Analisis dan Riwayat Executive Summary dengan pagination, detail, export PDF, dan hapus.</li>
+              <li><strong>Detail Modal:</strong> menampilkan model, latency, timestamp, request (dari raw log), generated summary, raw log lengkap.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>12. Fitur Halaman Komparasi Statistik</strong></div>
+          <div class="card-body">
+            <ul class="mb-0">
+              <li class="mb-2"><strong>Kartu Highlight:</strong> per metrik menampilkan pemenang, signifikansi, p-holm, effect size.</li>
+              <li class="mb-2"><strong>Chart.js Bar Chart:</strong> dua panel interaktif &mdash; selisih mean dan effect size per metrik.</li>
+              <li class="mb-2"><strong>Kesimpulan Otomatis:</strong> narasi rekomendasi berdasarkan akumulasi hasil uji.</li>
+              <li class="mb-2"><strong>Tabel Lengkap:</strong> Ringkasan Metrik, Shapiro-Wilk, Statistik Deskriptif, Uji Inferensial Final (dengan kategori effect size), Interpretasi Siap Pakai.</li>
+              <li class="mb-2"><strong>Export PDF:</strong> laporan komprehensif berisi seluruh tabel statistik.</li>
+              <li><strong>Riwayat Komparasi:</strong> tersimpan otomatis saat "Analyze Statistik" dijalankan.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>13. Ekspor PDF</strong></div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-sm table-striped mb-0">
+                <thead>
+                  <tr><th>Jenis Laporan</th><th>Konten</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Evaluasi Dataset</td><td>Tabel per-TxID: raw log, golden summary, generated summary, metrik, latency + executive summary (jika ada)</td></tr>
+                  <tr><td>Analisis Realtime</td><td>Detail transaksi: metadata, raw log, generated summary, golden summary (jika ada)</td></tr>
+                  <tr><td>Executive Summary</td><td>Seluruh analisis + narasi executive summary</td></tr>
+                  <tr><td>Komparasi Statistik</td><td>Ringkasan metrik, Shapiro-Wilk, deskriptif, inferensial, highlights, kesimpulan, interpretasi</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>14. Alur Kerja Aplikasi</strong></div>
+          <div class="card-body">
+            <ol class="mb-0">
+              <li class="mb-2">User memilih model LLM.</li>
+              <li class="mb-2">User memilih transaksi (TxID) dari dataset atau log realtime (atau upload file custom).</li>
+              <li class="mb-2">Backend membentuk prompt dari raw log dan mengirim task ke background thread.</li>
+              <li class="mb-2">Frontend polling progress dan menampilkan progress bar dinamis.</li>
+              <li class="mb-2">Backend memanggil LM Studio untuk generate summary per transaksi.</li>
+              <li class="mb-2">Jika ada golden summary, backend menghitung ROUGE, METEOR, BERTScore, dan latency.</li>
+              <li class="mb-2">Hasil disimpan ke SQLite dan otomatis masuk riwayat. CSV juga di-generate untuk evaluasi dataset.</li>
+              <li>User meninjau hasil melalui tabel + detail modal + chart. Dapat export PDF kapan saja.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>15. Deployment Guide (Windows + WSL)</strong></div>
+          <div class="card-body">
+            <h6>Prerequisite</h6>
+            <ul>
+              <li>Windows dengan WSL2 (Ubuntu).</li>
+              <li>LM Studio aktif di host dengan model sudah diload.</li>
+              <li>Akses sudo di WSL untuk setup Nginx/ModSecurity.</li>
+            </ul>
+
+            <h6>Langkah Ringkas</h6>
+            <ol>
+              <li>Aktifkan backend virtual environment dan install dependency.</li>
+              <li>Jalankan script setup WSL untuk Nginx + ModSecurity + service backend.</li>
+              <li>Pastikan service aktif: nginx dan waf-observatory-backend.</li>
+              <li>Akses aplikasi melalui <code>http://localhost/</code>.</li>
+            </ol>
+
+            <h6>Menjalankan Backend Manual</h6>
+            <pre class="bg-dark text-light p-2 rounded"><code>cd /mnt/c/Users/risqu/Desktop/SKRIPSI/waf-observatory-app/backend
+source .venv-wsl/bin/activate
+python3 -c "from app import app; from waitress import serve; serve(app, host='127.0.0.1', port=5000)"</code></pre>
+
+            <h6>Verifikasi Cepat</h6>
+            <ul>
+              <li><code>GET /api/health</code> harus mengembalikan status ok.</li>
+              <li><code>GET /api/models</code> menampilkan model Gemma dan Qwen.</li>
+              <li><code>GET /api/dataset/rows</code> menampilkan jumlah row dataset.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>16. Troubleshooting</strong></div>
+          <div class="card-body">
+            <ul class="mb-0">
+              <li class="mb-2"><strong>502 Bad Gateway:</strong> backend sedang warm-up model BERT atau service belum bind port 5000. Tunggu hingga log "BERT model siap!" muncul.</li>
+              <li class="mb-2"><strong>Model tidak muncul:</strong> pastikan model di LM Studio sedang loaded dan endpoint API aktif.</li>
+              <li class="mb-2"><strong>BERTScore kosong (N/A):</strong> pastikan package bert-score + torch sudah terinstall di venv backend.</li>
+              <li class="mb-2"><strong>Analisis lambat:</strong> normal untuk batch besar. Gunakan progress bar untuk memantau. Kurangi batch size jika perlu.</li>
+              <li class="mb-2"><strong>Log realtime tidak terbaca:</strong> pastikan permission file audit log ModSecurity bisa dibaca service backend.</li>
+              <li class="mb-2"><strong>403 Forbidden saat hapus riwayat:</strong> ModSecurity memblokir HTTP DELETE. Aplikasi sudah menggunakan POST sebagai alternatif.</li>
+              <li class="mb-2"><strong>Task hilang setelah pindah halaman:</strong> task berjalan di background. Saat kembali ke halaman yang sama, task otomatis di-resume dari <code>localStorage</code>.</li>
+              <li><strong>Checkbox ter-reset saat auto-refresh:</strong> centangan disimpan berdasarkan TXID, bukan posisi baris. Pastikan versi terbaru aplikasi.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><strong>17. Database Schema</strong></div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-sm table-striped mb-0">
+                <thead>
+                  <tr><th>Tabel</th><th>Fungsi</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>analyses</code></td><td>Hasil analisis individual (mode, model, txid, raw log, golden/generated summary, metrik)</td></tr>
+                  <tr><td><code>executive_summaries</code></td><td>Executive summary + analysis_ids (JSON) untuk relasi ke analyses</td></tr>
+                  <tr><td><code>raw_logs</code></td><td>Log terakumulasi dari audit log ModSecurity (persisten, tidak hilang saat reload)</td></tr>
+                  <tr><td><code>dataset_evaluations</code></td><td>Riwayat evaluasi dataset (model, file, txid count, metrics summary, csv path)</td></tr>
+                  <tr><td><code>stat_comparisons</code></td><td>Riwayat komparasi statistik (source, files, highlights, conclusions)</td></tr>
+                  <tr><td><code>tasks</code></td><td>Background task tracking (status, progress, result, error)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><strong>18. Batasan dan Rekomendasi</strong></div>
+          <div class="card-body">
+            <ul class="mb-0">
+              <li class="mb-2">Evaluasi summary sangat bergantung kualitas golden reference dan konsistensi gaya bahasa.</li>
+              <li class="mb-2">Sebagian sinyal semantic bisa tidak tertangkap metrik lexical murni, karena itu BERTScore penting dipakai bersama ROUGE/METEOR.</li>
+              <li class="mb-2">Proses AI berjalan di background thread (cocok untuk penggunaan tunggal). Untuk skenario produksi multi-user, gunakan task queue seperti Celery.</li>
+              <li>Audit dan retensi log sebaiknya mengikuti kebijakan keamanan organisasi.</li>
+            </ul>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
