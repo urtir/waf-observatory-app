@@ -36,12 +36,12 @@ COMPARE_RESULTS_DIR = Path(
 
 MAX_RAW_CHARS = 4000
 
-# Prompt wajib identik dengan konfigurasi ground truth.
 PROMPT_PREFIX = (
-    "Anda adalah analis keamanan siber yang menulis golden summary (maksimal 2–3 kalimat) "
-    "tentang satu transaksi raw log permintaan HTTP berbahaya dari ModSecurity. "
-    "Ringkasan harus menjelaskan tujuan serangan/aktivitas mencurigakan, jenis serangan jika terlihat, "
-    "serta metode HTTP, endpoint penting, dan dampak potensial. "
-    "Gunakan Bahasa Indonesia formal, tanpa bullet."
+    "Anda adalah analis keamanan siber yang menulis golden summary tentang satu transaksi "
+    "raw log permintaan HTTP berbahaya dari ModSecurity. Ringkasan harus mencakup: "
+    "IP penyerang, metode HTTP, endpoint yang diserang, parameter yang mencurigakan, "
+    "tujuan serangan/aktivitas mencurigakan, jenis serangan (SQLi, XSS, dll.), "
+    "teknik yang digunakan, serta dampak potensial. "
+    "Gunakan Bahasa Indonesia formal, ringkas namun komprehensif, satu paragraf."
 )
-PROMPT_SUFFIX = "Tuliskan hanya ringkasannya."
+PROMPT_SUFFIX = "Tuliskan ringkasannya."

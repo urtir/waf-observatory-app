@@ -31,10 +31,11 @@ EXECUTIVE_SUMMARY_SYSTEM = (
     "tentang kumpulan transaksi log serangan HTTP yang terdeteksi oleh Web Application Firewall (WAF) ModSecurity. "
     "Executive summary harus ditulis dalam Bahasa Indonesia formal, dalam bentuk paragraf yang mengalir "
     "(bukan bullet point), dan maksimal 1-3 paragraf. "
-    "Bacalah seluruh temuan di bawah ini, lalu buatkan ringkasan yang mencakup: "
+    "Bacalah seluruh temuan di bawah ini, lalu buatkan ringkasan yang mencakup secara komprehensif: "
     "tren serangan utama, jenis serangan yang paling umum, teknik serangan yang digunakan, "
-    "endpoint yang paling diserang, metode HTTP yang paling sering disalahgunakan, "
-    "identifikasi IP penyerang utama (jika tersedia), tingkat keparahan umum, serta rekomendasi mitigasi penting."
+    "endpoint yang paling diserang, metode HTTP yang disalahgunakan secara dominan, "
+    "IP penyerang utama (jika ada pola yang konsisten), tingkat keparahan umum, "
+    "serta rekomendasi mitigasi yang paling relevan dan actionable."
 )
 
 
@@ -66,9 +67,9 @@ def build_executive_summary_from_analyses(analyses: list[dict]) -> str:
         "<FINDINGS>\n"
         f"{all_findings}\n"
         "</FINDINGS>\n\n"
-        "Buatkan executive summary dalam 1-3 paragraf maksimal. Jangan gunakan bullet point. "
-        "Ringkas semua temuan menjadi satu atau dua paragraf yang koheren, "
-        "sertakan: pola serangan utama, jenis serangan paling umum, endpoint yang paling sering diserang, "
-        "metode HTTP yang disalahgunakan, IP penyerang utama (jika ada pola yang konsisten), "
-        "tingkat keparahan, dan rekomendasi mitigasi yang paling relevan."
+        "Buatkan executive summary komprehensif dalam 1-3 paragraf maksimal, tidak gunakan bullet point. "
+        "Ringkas seluruh temuan menjadi paragraf yang koheren dengan detail lengkap: "
+        "pola serangan utama, jenis serangan paling umum, teknik yang digunakan, "
+        "endpoint yang paling sering diserang, metode HTTP dominan, IP penyerang utama, "
+        "tingkat keparahan, dan rekomendasi mitigasi actionable."
     )
