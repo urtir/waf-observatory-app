@@ -24,6 +24,8 @@ Aplikasi ini ditujukan untuk membantu SOC analyst, engineer, dan peneliti mengub
   - [Teknologi yang Digunakan](#teknologi-yang-digunakan)
   - [Konfigurasi Lingkungan (Environment Variables)](#konfigurasi-lingkungan-environment-variables)
   - [Instalasi dan Setup](#instalasi-dan-setup)
+  - [Panduan Penggunaan dari Nol (Step-by-Step Lengkap)](#panduan-penggunaan-dari-nol-step-by-step-lengkap)
+  - [Galeri Screenshot Tahapan](#galeri-screenshot-tahapan)
   - [Menjalankan Aplikasi](#menjalankan-aplikasi)
   - [Halaman dan Kapabilitas Frontend](#halaman-dan-kapabilitas-frontend)
   - [API Backend Lengkap](#api-backend-lengkap)
@@ -210,6 +212,203 @@ Script ini melakukan:
 - install + enable service `waf-observatory-backend`.
 
 > Catatan: file systemd saat ini berisi path dan user spesifik (`risqu`), sesuaikan dengan lingkungan Anda.
+
+---
+
+## Panduan Penggunaan dari Nol (Step-by-Step Lengkap)
+
+Bagian ini adalah alur praktis dari **mesin kosong** sampai **berhasil memakai semua fitur utama aplikasi**.
+
+### A. Persiapan awal sistem
+
+1. Siapkan Linux/WSL2 Ubuntu dengan akses `sudo`.
+2. Pastikan internet tersedia untuk instal dependency Python dan paket sistem.
+3. Clone repository:
+
+```bash
+git clone https://github.com/urtir/waf-observatory-app.git
+cd waf-observatory-app
+```
+
+4. (Opsional tapi disarankan) update package index:
+
+```bash
+sudo apt-get update
+```
+
+### B. Siapkan backend Python
+
+1. Masuk ke folder backend:
+
+```bash
+cd backend
+```
+
+2. Buat virtual environment dan aktifkan:
+
+```bash
+python3 -m venv .venv-wsl
+source .venv-wsl/bin/activate
+```
+
+3. Install dependency minimal:
+
+```bash
+pip install -r requirements.txt
+```
+
+4. Jika ingin evaluasi BERTScore penuh:
+
+```bash
+pip install -r requirements-metrics-full.txt
+```
+
+5. Kembali ke root project:
+
+```bash
+cd ..
+```
+
+### C. Siapkan LM Studio (wajib untuk inferensi)
+
+1. Jalankan LM Studio di host Anda.
+2. Aktifkan mode API server OpenAI-compatible.
+3. Pastikan endpoint dapat diakses dari backend (default `http://127.0.0.1:1234`).
+4. Load model yang didukung aplikasi:
+   - `google/gemma-3-4b`
+   - `qwen/qwen3-4b-2507`
+
+> Tanpa LM Studio aktif, endpoint model dan proses ringkasan tidak akan berjalan.
+
+### D. Siapkan infrastruktur WAF (Nginx + ModSecurity)
+
+1. Jalankan script setup:
+
+```bash
+bash scripts/wsl_system_setup.sh
+```
+
+2. Verifikasi service:
+
+```bash
+sudo systemctl status nginx --no-pager
+sudo systemctl status waf-observatory-backend --no-pager
+```
+
+3. Verifikasi konfigurasi Nginx:
+
+```bash
+sudo nginx -t
+```
+
+### E. Jalankan aplikasi (opsi manual)
+
+Jika tidak memakai systemd, jalankan backend manual:
+
+```bash
+cd scripts
+bash run_backend_waitress.sh
+```
+
+Lalu buka:
+- `http://localhost/` (via Nginx), atau
+- `http://127.0.0.1:5000/` (langsung ke Flask jika Nginx tidak dipakai).
+
+### F. Verifikasi endpoint dasar
+
+1. Health check:
+
+```bash
+curl http://127.0.0.1:5000/api/health
+```
+
+2. Cek model tersedia:
+
+```bash
+curl http://127.0.0.1:5000/api/models
+```
+
+Jika endpoint model kosong/error, periksa kembali LM Studio.
+
+### G. Penggunaan fitur utama (workflow harian)
+
+#### 1) Evaluasi Dataset Uji (`/`)
+
+1. Buka halaman Home.
+2. (Opsional) Upload file log + golden CSV custom.
+3. Klik **Refresh Dataset**.
+4. Pilih model.
+5. Pilih TxID (manual/Select First N).
+6. Klik **Analyze Selected**.
+7. Tunggu progress bar selesai.
+8. Tinjau metrik dan hasil detail.
+9. Download CSV evaluasi jika diperlukan.
+
+#### 2) Analisis Realtime (`/realtime`)
+
+1. Klik **Reload Log** untuk tarik log terbaru dari ModSecurity.
+2. Gunakan filter status/alert/time window.
+3. Pilih row log via checkbox.
+4. Klik **Analyze Selected**.
+5. (Opsional) aktifkan toggle **Executive Summary**.
+6. Export PDF jika dibutuhkan.
+
+#### 3) Komparasi Statistik (`/compare`)
+
+1. Pastikan file CSV komparasi tersedia di `COMPARE_RESULTS_DIR`.
+2. Klik **Load Data** untuk memuat tabel statistik.
+3. Klik **Analyze Statistik** untuk recompute inferensial.
+4. Tinjau highlight, chart, kesimpulan, dan interpretasi.
+5. Klik **Export PDF Statistik** untuk laporan final.
+
+### H. Simulasi trafik serangan untuk mengisi log realtime
+
+Untuk menghasilkan log uji secara cepat:
+
+```bash
+bash SEED_WAF_LOGS.sh
+```
+
+Atau gunakan:
+- `scripts/seed_owasp_top10_attacks.sh`
+- `scripts/seed_owasp_top10_attacks.bat` (Windows)
+- `POC_OWASP_WAF_TESTS_WSL*.txt`
+
+Lalu kembali ke halaman `/realtime` dan klik **Reload Log**.
+
+### I. Validasi hasil akhir penggunaan
+
+Checklist sukses:
+
+- `GET /api/health` mengembalikan `{"status":"ok"}`.
+- Model Gemma/Qwen tampil di dropdown.
+- Dataset bisa dipilih dan dianalisis.
+- Realtime log muncul dan bisa diringkas.
+- Executive summary berhasil dibuat.
+- PDF dan CSV bisa diunduh.
+- Riwayat analisis/evaluasi/komparasi tersimpan.
+
+---
+
+## Galeri Screenshot Tahapan
+
+> Screenshot di bawah diambil dari UI aplikasi untuk membantu orientasi penggunaan.
+
+### 1) Homepage - Evaluasi Dataset
+
+![Homepage Dataset](docs/screenshots/01-home-dataset.png)
+
+### 2) Halaman Realtime Logs
+
+![Realtime Logs](docs/screenshots/02-realtime.png)
+
+### 3) Halaman Komparasi Statistik
+
+![Komparasi Statistik](docs/screenshots/03-compare.png)
+
+### 4) Halaman Dokumentasi Internal
+
+![Dokumentasi Internal](docs/screenshots/04-docs.png)
 
 ---
 
